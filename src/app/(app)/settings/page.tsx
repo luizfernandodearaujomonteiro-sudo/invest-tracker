@@ -37,7 +37,7 @@ export default function SettingsPage() {
       if (!user) return;
 
       const { data } = await supabase
-        .from("profiles")
+        .from("invest_profiles")
         .select("display_name, preferred_currency")
         .eq("id", user.id)
         .single();
@@ -60,7 +60,7 @@ export default function SettingsPage() {
     if (!user) return;
 
     const { error } = await supabase
-      .from("profiles")
+      .from("invest_profiles")
       .update({
         display_name: displayName,
         preferred_currency: currency,

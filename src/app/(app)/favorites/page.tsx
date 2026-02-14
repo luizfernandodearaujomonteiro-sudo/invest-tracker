@@ -33,7 +33,7 @@ export default function FavoritesPage() {
         <div className="space-y-2">
           {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
           {favorites.map((fav: any) => {
-            const asset = Array.isArray(fav.assets) ? fav.assets[0] : fav.assets;
+            const asset = Array.isArray(fav.invest_assets) ? fav.invest_assets[0] : fav.invest_assets;
             if (!asset) return null;
             return (
               <Card

@@ -19,7 +19,7 @@ export async function GET(request: Request) {
 
   // Search in local assets table
   const { data: assets } = await supabase
-    .from("assets")
+    .from("invest_assets")
     .select("id, ticker, name, asset_type, currency, logo_url")
     .or(`ticker.ilike.%${q}%,name.ilike.%${q}%`)
     .eq("is_active", true)

@@ -24,7 +24,7 @@ export function useBrokers() {
       if (!user) throw new Error("Nao autenticado");
 
       const { data, error } = await supabase
-        .from("brokers")
+        .from("invest_brokers")
         .select("*")
         .order("name");
 
@@ -48,7 +48,7 @@ export function useCreateBroker() {
       if (!user) throw new Error("Nao autenticado");
 
       const { data, error } = await supabase
-        .from("brokers")
+        .from("invest_brokers")
         .insert({
           user_id: user.id,
           name: input.name,
@@ -89,7 +89,7 @@ export function useUpdateBroker() {
       notes?: string;
     }) => {
       const { data, error } = await supabase
-        .from("brokers")
+        .from("invest_brokers")
         .update({
           name: input.name,
           broker_type: input.broker_type,
@@ -120,7 +120,7 @@ export function useDeleteBroker() {
 
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("brokers").delete().eq("id", id);
+      const { error } = await supabase.from("invest_brokers").delete().eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {

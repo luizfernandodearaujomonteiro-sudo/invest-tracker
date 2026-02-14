@@ -1,9 +1,10 @@
 -- =============================================
 -- Seed: Popular Assets
+-- Prefix: invest_
 -- =============================================
 
 -- Brazilian Stocks
-INSERT INTO public.assets (ticker, name, asset_type, currency, exchange) VALUES
+INSERT INTO public.invest_assets (ticker, name, asset_type, currency, exchange) VALUES
   ('PETR4', 'Petrobras PN', 'br_stock', 'BRL', 'B3'),
   ('VALE3', 'Vale ON', 'br_stock', 'BRL', 'B3'),
   ('ITUB4', 'Itau Unibanco PN', 'br_stock', 'BRL', 'B3'),
@@ -22,7 +23,7 @@ INSERT INTO public.assets (ticker, name, asset_type, currency, exchange) VALUES
 ON CONFLICT (ticker) DO NOTHING;
 
 -- Brazilian FIIs
-INSERT INTO public.assets (ticker, name, asset_type, currency, exchange) VALUES
+INSERT INTO public.invest_assets (ticker, name, asset_type, currency, exchange) VALUES
   ('HGLG11', 'CGHG Logistica FII', 'br_fii', 'BRL', 'B3'),
   ('XPML11', 'XP Malls FII', 'br_fii', 'BRL', 'B3'),
   ('KNRI11', 'Kinea Renda Imobiliaria FII', 'br_fii', 'BRL', 'B3'),
@@ -31,14 +32,14 @@ INSERT INTO public.assets (ticker, name, asset_type, currency, exchange) VALUES
 ON CONFLICT (ticker) DO NOTHING;
 
 -- Brazilian ETFs
-INSERT INTO public.assets (ticker, name, asset_type, currency, exchange) VALUES
+INSERT INTO public.invest_assets (ticker, name, asset_type, currency, exchange) VALUES
   ('BOVA11', 'iShares Ibovespa ETF', 'br_etf', 'BRL', 'B3'),
   ('IVVB11', 'iShares S&P500 BRL ETF', 'br_etf', 'BRL', 'B3'),
   ('HASH11', 'Hashdex Nasdaq Crypto ETF', 'br_etf', 'BRL', 'B3')
 ON CONFLICT (ticker) DO NOTHING;
 
 -- US Stocks
-INSERT INTO public.assets (ticker, name, asset_type, currency, exchange) VALUES
+INSERT INTO public.invest_assets (ticker, name, asset_type, currency, exchange) VALUES
   ('AAPL', 'Apple Inc', 'us_stock', 'USD', 'NASDAQ'),
   ('MSFT', 'Microsoft Corp', 'us_stock', 'USD', 'NASDAQ'),
   ('GOOGL', 'Alphabet Inc', 'us_stock', 'USD', 'NASDAQ'),
@@ -52,7 +53,7 @@ INSERT INTO public.assets (ticker, name, asset_type, currency, exchange) VALUES
 ON CONFLICT (ticker) DO NOTHING;
 
 -- US ETFs
-INSERT INTO public.assets (ticker, name, asset_type, currency, exchange) VALUES
+INSERT INTO public.invest_assets (ticker, name, asset_type, currency, exchange) VALUES
   ('VOO', 'Vanguard S&P 500 ETF', 'us_etf', 'USD', 'NYSE'),
   ('QQQ', 'Invesco QQQ Trust', 'us_etf', 'USD', 'NASDAQ'),
   ('VTI', 'Vanguard Total Stock Market ETF', 'us_etf', 'USD', 'NYSE'),
@@ -60,7 +61,7 @@ INSERT INTO public.assets (ticker, name, asset_type, currency, exchange) VALUES
 ON CONFLICT (ticker) DO NOTHING;
 
 -- Cryptocurrencies
-INSERT INTO public.assets (ticker, name, asset_type, currency, exchange, coingecko_id) VALUES
+INSERT INTO public.invest_assets (ticker, name, asset_type, currency, exchange, coingecko_id) VALUES
   ('BTC', 'Bitcoin', 'crypto', 'USD', 'CoinGecko', 'bitcoin'),
   ('ETH', 'Ethereum', 'crypto', 'USD', 'CoinGecko', 'ethereum'),
   ('SOL', 'Solana', 'crypto', 'USD', 'CoinGecko', 'solana'),

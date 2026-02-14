@@ -53,10 +53,9 @@ export default function RegisterPage() {
       return;
     }
 
-    toast.success("Conta criada com sucesso!", {
-      description: "Verifique seu email para confirmar a conta.",
-    });
-    router.push("/login");
+    toast.success("Conta criada com sucesso!");
+    router.push("/dashboard");
+    router.refresh();
   };
 
   return (

@@ -19,7 +19,7 @@ export async function GET(
 
   // Find asset
   const { data: asset } = await supabase
-    .from("assets")
+    .from("invest_assets")
     .select("id, ticker, asset_type, coingecko_id")
     .eq("ticker", ticker.toUpperCase())
     .single();
@@ -31,7 +31,7 @@ export async function GET(
   // Check cache
   const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
   const { data: cached } = await supabase
-    .from("price_cache")
+    .from("invest_price_cache")
     .select("*")
     .eq("asset_id", asset.id)
     .gte("fetched_at", fiveMinAgo)
@@ -60,7 +60,7 @@ export async function GET(
     );
 
     // Update cache
-    await supabase.from("price_cache").upsert(
+    await supabase.from("invest_price_cache").upsert(
       {
         asset_id: asset.id,
         current_price: price.currentPrice,

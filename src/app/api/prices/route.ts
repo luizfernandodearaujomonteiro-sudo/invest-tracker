@@ -21,7 +21,7 @@ export async function GET(request: Request) {
 
   // Fetch asset info for all tickers
   const { data: assets } = await supabase
-    .from("assets")
+    .from("invest_assets")
     .select("id, ticker, asset_type, coingecko_id")
     .in("ticker", tickers);
 
@@ -34,7 +34,7 @@ export async function GET(request: Request) {
   const assetIds = assets.map((a) => a.id);
 
   const { data: cached } = await supabase
-    .from("price_cache")
+    .from("invest_price_cache")
     .select("*")
     .in("asset_id", assetIds)
     .gte("fetched_at", fiveMinAgo);
@@ -71,7 +71,7 @@ export async function GET(request: Request) {
       );
 
       // Upsert cache
-      await supabase.from("price_cache").upsert(
+      await supabase.from("invest_price_cache").upsert(
         {
           asset_id: asset.id,
           current_price: price.currentPrice,

@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useTransactions, useDeleteTransaction } from "@/hooks/useTransactions";
 import { TransactionForm } from "@/components/transactions/TransactionForm";
+import { CsvImportDialog } from "@/components/transactions/CsvImportDialog";
+import { XpImportDialog } from "@/components/transactions/XpImportDialog";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -20,7 +22,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, ArrowLeftRight, Trash2 } from "lucide-react";
+import { Plus, ArrowLeftRight, Trash2, Upload, FileSpreadsheet } from "lucide-react";
 import { formatCurrency, formatQuantity } from "@/lib/utils/format";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -47,6 +49,8 @@ export default function TransactionsPage() {
   const { data: transactions, isLoading } = useTransactions();
   const deleteTransaction = useDeleteTransaction();
   const [formOpen, setFormOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [xpImportOpen, setXpImportOpen] = useState(false);
 
   const handleDelete = async (id: string) => {
     if (confirm("Tem certeza que deseja remover esta transacao?")) {
@@ -63,13 +67,25 @@ export default function TransactionsPage() {
             Historico de compras, vendas e movimentacoes
           </p>
         </div>
-        <Button onClick={() => setFormOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          Nova Transacao
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setXpImportOpen(true)}>
+            <FileSpreadsheet className="mr-2 h-4 w-4" />
+            Importar XP
+          </Button>
+          <Button variant="outline" onClick={() => setImportOpen(true)}>
+            <Upload className="mr-2 h-4 w-4" />
+            Importar CSV
+          </Button>
+          <Button onClick={() => setFormOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            Nova Transacao
+          </Button>
+        </div>
       </div>
 
       <TransactionForm open={formOpen} onOpenChange={setFormOpen} />
+      <CsvImportDialog open={importOpen} onOpenChange={setImportOpen} />
+      <XpImportDialog open={xpImportOpen} onOpenChange={setXpImportOpen} />
 
       {isLoading ? (
         <div className="space-y-3">
@@ -97,8 +113,8 @@ export default function TransactionsPage() {
               </TableHeader>
               <TableBody>
                 {transactions.map((tx: Record<string, unknown>) => {
-                  const holdings = tx.holdings as Record<string, unknown> | null;
-                  const assets = holdings?.assets as Record<string, unknown> | null;
+                  const holdings = tx.invest_holdings as Record<string, unknown> | null;
+                  const assets = holdings?.invest_assets as Record<string, unknown> | null;
                   return (
                     <TableRow key={tx.id as string}>
                       <TableCell className="text-sm">

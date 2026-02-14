@@ -65,7 +65,7 @@ export function TransactionForm({
     const supabase = createClient();
     const fetchAssets = async () => {
       const { data } = await supabase
-        .from("assets")
+        .from("invest_assets")
         .select("id, ticker, name, asset_type")
         .eq("is_active", true)
         .order("ticker");

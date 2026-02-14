@@ -11,9 +11,9 @@ interface HoldingRow {
   average_price: number;
   total_invested: number;
   broker_id: string;
-  brokers: { name: string };
+  invest_brokers: { name: string };
   asset_id: string;
-  assets: {
+  invest_assets: {
     id: string;
     ticker: string;
     name: string;
@@ -35,7 +35,7 @@ export function usePortfolio() {
       if (!user) throw new Error("Nao autenticado");
 
       const { data: holdings, error } = await supabase
-        .from("holdings")
+        .from("invest_holdings")
         .select(
           `
           id,
@@ -43,9 +43,9 @@ export function usePortfolio() {
           average_price,
           total_invested,
           broker_id,
-          brokers ( name ),
+          invest_brokers ( name ),
           asset_id,
-          assets ( id, ticker, name, asset_type, currency, logo_url )
+          invest_assets ( id, ticker, name, asset_type, currency, logo_url )
         `
         )
         .gt("total_quantity", 0);
@@ -54,10 +54,10 @@ export function usePortfolio() {
 
       // Fetch prices for all assets
       const assetIds = (holdings as unknown as HoldingRow[]).map(
-        (h) => h.assets.id
+        (h) => h.invest_assets.id
       );
       const { data: prices } = await supabase
-        .from("price_cache")
+        .from("invest_price_cache")
         .select("asset_id, current_price, change_percent")
         .in("asset_id", assetIds);
 
@@ -68,7 +68,7 @@ export function usePortfolio() {
       const portfolioAssets: PortfolioAsset[] = (
         holdings as unknown as HoldingRow[]
       ).map((h) => {
-        const price = priceMap.get(h.assets.id);
+        const price = priceMap.get(h.invest_assets.id);
         const currentPrice = price?.current_price
           ? Number(price.current_price)
           : null;
@@ -87,12 +87,12 @@ export function usePortfolio() {
 
         return {
           holdingId: h.id,
-          assetId: h.assets.id,
-          ticker: h.assets.ticker,
-          name: h.assets.name,
-          assetType: h.assets.asset_type,
-          currency: h.assets.currency,
-          brokerName: h.brokers.name,
+          assetId: h.invest_assets.id,
+          ticker: h.invest_assets.ticker,
+          name: h.invest_assets.name,
+          assetType: h.invest_assets.asset_type,
+          currency: h.invest_assets.currency,
+          brokerName: h.invest_brokers.name,
           brokerId: h.broker_id,
           totalQuantity: Number(h.total_quantity),
           averagePrice: Number(h.average_price),
@@ -104,7 +104,7 @@ export function usePortfolio() {
           currentValue,
           profitLoss,
           profitLossPercent,
-          logoUrl: h.assets.logo_url,
+          logoUrl: h.invest_assets.logo_url,
         };
       });
 

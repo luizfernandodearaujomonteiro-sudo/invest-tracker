@@ -31,7 +31,7 @@ export async function GET(request: Request) {
   }
 
   const { data: asset } = await supabase
-    .from("assets")
+    .from("invest_assets")
     .select("id, ticker, asset_type, coingecko_id")
     .eq("ticker", ticker.toUpperCase())
     .single();

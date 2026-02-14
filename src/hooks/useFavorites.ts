@@ -16,12 +16,12 @@ export function useFavorites() {
       if (!user) throw new Error("Nao autenticado");
 
       const { data, error } = await supabase
-        .from("favorites")
+        .from("invest_favorites")
         .select(
           `
           id,
           asset_id,
-          assets ( id, ticker, name, asset_type, currency, logo_url )
+          invest_assets ( id, ticker, name, asset_type, currency, logo_url )
         `
         )
         .order("created_at", { ascending: false });
@@ -52,7 +52,7 @@ export function useToggleFavorite() {
       if (isFavorite) {
         // Remove from favorites
         const { error } = await supabase
-          .from("favorites")
+          .from("invest_favorites")
           .delete()
           .eq("user_id", user.id)
           .eq("asset_id", assetId);
@@ -60,7 +60,7 @@ export function useToggleFavorite() {
       } else {
         // Add to favorites
         const { error } = await supabase
-          .from("favorites")
+          .from("invest_favorites")
           .insert({ user_id: user.id, asset_id: assetId });
         if (error) throw error;
       }

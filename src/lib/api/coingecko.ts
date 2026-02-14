@@ -2,10 +2,10 @@ import type { PriceData, HistoricalPrice } from "@/types/portfolio";
 
 const CG_BASE = "https://api.coingecko.com/api/v3";
 
-function getHeaders(): HeadersInit {
+function getApiKeyParam(): string {
   const key = process.env.COINGECKO_API_KEY;
-  if (key) return { "x-cg-demo-api-key": key };
-  return {};
+  if (key) return `&x_cg_demo_api_key=${key}`;
+  return "";
 }
 
 export async function fetchCoinGeckoPrice(
@@ -13,8 +13,8 @@ export async function fetchCoinGeckoPrice(
   ticker: string
 ): Promise<PriceData> {
   const res = await fetch(
-    `${CG_BASE}/simple/price?ids=${coinId}&vs_currencies=usd,brl&include_24hr_change=true&include_market_cap=true&include_24hr_vol=true`,
-    { headers: getHeaders(), next: { revalidate: 300 } }
+    `${CG_BASE}/simple/price?ids=${coinId}&vs_currencies=usd,brl&include_24hr_change=true&include_market_cap=true&include_24hr_vol=true${getApiKeyParam()}`,
+    { next: { revalidate: 300 } }
   );
 
   if (!res.ok) throw new Error(`CoinGecko error: ${res.status}`);
@@ -43,8 +43,7 @@ export async function fetchCoinGeckoHistory(
   days: number | string
 ): Promise<HistoricalPrice[]> {
   const res = await fetch(
-    `${CG_BASE}/coins/${coinId}/market_chart?vs_currency=usd&days=${days}`,
-    { headers: getHeaders() }
+    `${CG_BASE}/coins/${coinId}/market_chart?vs_currency=usd&days=${days}${getApiKeyParam()}`
   );
 
   if (!res.ok) throw new Error(`CoinGecko history error: ${res.status}`);

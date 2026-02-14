@@ -31,12 +31,12 @@ export function useTransactions(holdingId?: string) {
       if (!user) throw new Error("Nao autenticado");
 
       let query = supabase
-        .from("transactions")
+        .from("invest_transactions")
         .select(
           `
           *,
-          holdings (
-            assets ( ticker, name )
+          invest_holdings (
+            invest_assets ( ticker, name )
           )
         `
         )
@@ -75,7 +75,7 @@ export function useCreateTransaction() {
 
       // Find or create holding
       let { data: holding } = await supabase
-        .from("holdings")
+        .from("invest_holdings")
         .select("id")
         .eq("user_id", user.id)
         .eq("broker_id", input.brokerId)
@@ -84,7 +84,7 @@ export function useCreateTransaction() {
 
       if (!holding) {
         const { data: newHolding, error: holdingError } = await supabase
-          .from("holdings")
+          .from("invest_holdings")
           .insert({
             user_id: user.id,
             broker_id: input.brokerId,
@@ -101,7 +101,7 @@ export function useCreateTransaction() {
         input.quantity * input.pricePerUnit + (input.fees || 0);
 
       const { data, error } = await supabase
-        .from("transactions")
+        .from("invest_transactions")
         .insert({
           user_id: user.id,
           holding_id: holding.id,
@@ -139,7 +139,7 @@ export function useDeleteTransaction() {
   return useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase
-        .from("transactions")
+        .from("invest_transactions")
         .delete()
         .eq("id", id);
       if (error) throw error;
