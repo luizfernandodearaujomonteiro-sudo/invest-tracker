@@ -1,7 +1,7 @@
 "use client";
 
-import { usePortfolio, usePortfolioSummary } from "@/hooks/usePortfolio";
-import { PortfolioSummaryCards } from "@/components/dashboard/PortfolioSummaryCards";
+import { usePortfolio, usePortfolioSummary, usePortfolioSummaryByCurrency } from "@/hooks/usePortfolio";
+import { PortfolioSummaryCards, CurrencySummaryCards } from "@/components/dashboard/PortfolioSummaryCards";
 import { AllocationPieChart } from "@/components/dashboard/AllocationPieChart";
 import { PortfolioTable } from "@/components/portfolio/PortfolioTable";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 export default function DashboardPage() {
   const { data: assets, isLoading } = usePortfolio();
   const summary = usePortfolioSummary(assets);
+  const currencySummaries = usePortfolioSummaryByCurrency(assets);
 
   if (isLoading) {
     return <DashboardSkeleton />;
@@ -25,8 +26,8 @@ export default function DashboardPage() {
         </p>
       </div>
 
-      {/* Summary Cards */}
-      <PortfolioSummaryCards summary={summary} />
+      {/* Summary Cards por Moeda */}
+      <CurrencySummaryCards summaries={currencySummaries} />
 
       {/* Charts */}
       <div className="grid gap-4 md:grid-cols-2">

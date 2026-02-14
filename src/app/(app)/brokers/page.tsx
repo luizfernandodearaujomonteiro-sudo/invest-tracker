@@ -51,8 +51,11 @@ import {
   Pencil,
   Trash2,
   Loader2,
+  Link2,
+  RefreshCw,
 } from "lucide-react";
 import { BROKER_SUGGESTIONS } from "@/lib/utils/constants";
+import { WalletAddressManager } from "@/components/wallet/WalletAddressManager";
 import type { BrokerType } from "@/types/database";
 
 const BROKER_TYPE_LABELS: Record<BrokerType, string> = {
@@ -78,6 +81,9 @@ export default function BrokersPage() {
   const [name, setName] = useState("");
   const [brokerType, setBrokerType] = useState<BrokerType>("broker");
   const [notes, setNotes] = useState("");
+  const [walletManagerBrokerId, setWalletManagerBrokerId] = useState<string | null>(null);
+
+  const walletManagerBroker = brokers?.find((b) => b.id === walletManagerBrokerId);
 
   const resetForm = () => {
     setName("");
@@ -244,7 +250,17 @@ export default function BrokersPage() {
                       <TableCell className="font-medium">
                         <div className="flex items-center gap-2">
                           <Icon className="h-4 w-4 text-muted-foreground" />
-                          {broker.name}
+                          <div>
+                            {broker.name}
+                            {broker.broker_type === "wallet" && broker.wallet_addresses && broker.wallet_addresses.length > 0 && (
+                              <div className="text-xs text-muted-foreground font-normal">
+                                {broker.wallet_addresses.length} endereco(s)
+                                {broker.last_synced_at && (
+                                  <> &middot; Sync: {new Date(broker.last_synced_at).toLocaleDateString("pt-BR")}</>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </TableCell>
                       <TableCell>
@@ -257,6 +273,17 @@ export default function BrokersPage() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
+                          {broker.broker_type === "wallet" && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              title="Gerenciar enderecos"
+                              onClick={() => setWalletManagerBrokerId(broker.id)}
+                            >
+                              <Link2 className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="icon"
@@ -331,6 +358,20 @@ export default function BrokersPage() {
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* Wallet Address Manager Dialog */}
+      {walletManagerBroker && (
+        <WalletAddressManager
+          open={!!walletManagerBrokerId}
+          onOpenChange={(open) => {
+            if (!open) setWalletManagerBrokerId(null);
+          }}
+          brokerId={walletManagerBroker.id}
+          brokerName={walletManagerBroker.name}
+          initialAddresses={walletManagerBroker.wallet_addresses || []}
+          lastSyncedAt={walletManagerBroker.last_synced_at}
+        />
       )}
     </div>
   );

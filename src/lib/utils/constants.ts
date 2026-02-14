@@ -48,8 +48,24 @@ export const DATE_RANGE_OPTIONS = [
   { value: "MAX" as const, label: "Max" },
 ];
 
+export const FIXED_INCOME_INDEX_LABELS: Record<string, string> = {
+  cdi: "CDI",
+  ipca: "IPCA+",
+  selic: "Selic",
+  prefixado: "Prefixado",
+};
+
+export const CHAIN_OPTIONS = [
+  { value: "arbitrum" as const, label: "Arbitrum (ETH)" },
+  { value: "bsc" as const, label: "BNB Chain" },
+  { value: "bitcoin" as const, label: "Bitcoin" },
+  { value: "solana" as const, label: "Solana" },
+  { value: "xrpl" as const, label: "XRP Ledger" },
+];
+
 export const CACHE_TTL = {
   MARKET_OPEN: 5 * 60 * 1000,   // 5 minutes
   MARKET_CLOSED: 60 * 60 * 1000, // 1 hour
   HISTORY: 24 * 60 * 60 * 1000,  // 24 hours
+  FIXED_INCOME: 60 * 60 * 1000,  // 1 hour
 };

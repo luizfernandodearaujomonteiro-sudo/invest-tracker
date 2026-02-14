@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { createClient } from "@/lib/supabase/client";
+import { ThemeToggle } from "@/components/shared/ThemeToggle";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -79,6 +80,10 @@ export function Sidebar() {
             <Settings className="h-4 w-4" />
             Configuracoes
           </Link>
+          <div className="flex items-center justify-between">
+            <span className="px-3 text-sm text-muted-foreground">Tema</span>
+            <ThemeToggle />
+          </div>
           <Separator className="my-2" />
           <Button
             variant="ghost"

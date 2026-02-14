@@ -36,7 +36,7 @@ export function useTransactions(holdingId?: string) {
           `
           *,
           invest_holdings (
-            invest_assets ( ticker, name )
+            invest_assets ( ticker, name, asset_type, currency )
           )
         `
         )
@@ -67,6 +67,9 @@ export function useCreateTransaction() {
       fees: number;
       executedAt: string;
       notes?: string;
+      fixedIncomeIndex?: string;
+      fixedIncomeRate?: number;
+      maturityDate?: string;
     }) => {
       const {
         data: { user },
@@ -95,6 +98,18 @@ export function useCreateTransaction() {
 
         if (holdingError) throw holdingError;
         holding = newHolding;
+      }
+
+      // Salvar dados de renda fixa no holding
+      if (input.fixedIncomeIndex) {
+        await supabase
+          .from("invest_holdings")
+          .update({
+            fixed_income_index: input.fixedIncomeIndex,
+            fixed_income_rate: input.fixedIncomeRate,
+            maturity_date: input.maturityDate || null,
+          })
+          .eq("id", holding.id);
       }
 
       const totalValue =

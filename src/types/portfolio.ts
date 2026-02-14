@@ -1,4 +1,4 @@
-import type { AssetType, Currency } from "./database";
+import type { AssetType, Currency, PriceAdjustment } from "./database";
 
 export interface PortfolioAsset {
   holdingId: string;
@@ -18,6 +18,11 @@ export interface PortfolioAsset {
   profitLoss: number | null;
   profitLossPercent: number | null;
   logoUrl: string | null;
+  priceAdjustments: PriceAdjustment[];
+  // Renda fixa (opcional)
+  fixedIncomeIndex?: string | null;
+  fixedIncomeRate?: number | null;
+  maturityDate?: string | null;
 }
 
 export interface PortfolioSummary {
@@ -28,6 +33,12 @@ export interface PortfolioSummary {
   dayChange: number;
   dayChangePercent: number;
   assetCount: number;
+  currency?: Currency;
+}
+
+export interface CurrencySummaries {
+  brl: PortfolioSummary;
+  usd: PortfolioSummary;
 }
 
 export interface AllocationItem {

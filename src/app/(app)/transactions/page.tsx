@@ -24,6 +24,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Plus, ArrowLeftRight, Trash2, Upload, FileSpreadsheet } from "lucide-react";
 import { formatCurrency, formatQuantity } from "@/lib/utils/format";
+import type { Currency } from "@/types/database";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -115,6 +116,7 @@ export default function TransactionsPage() {
                 {transactions.map((tx: Record<string, unknown>) => {
                   const holdings = tx.invest_holdings as Record<string, unknown> | null;
                   const assets = holdings?.invest_assets as Record<string, unknown> | null;
+                  const txCurrency = (assets?.currency as Currency) || "BRL";
                   return (
                     <TableRow key={tx.id as string}>
                       <TableCell className="text-sm">
@@ -142,13 +144,13 @@ export default function TransactionsPage() {
                         {formatQuantity(tx.quantity as number)}
                       </TableCell>
                       <TableCell className="text-right font-mono text-sm">
-                        {formatCurrency(tx.price_per_unit as number)}
+                        {formatCurrency(tx.price_per_unit as number, txCurrency)}
                       </TableCell>
                       <TableCell className="text-right font-mono text-sm font-medium">
-                        {formatCurrency(tx.total_value as number)}
+                        {formatCurrency(tx.total_value as number, txCurrency)}
                       </TableCell>
                       <TableCell className="text-right font-mono text-sm text-muted-foreground hidden sm:table-cell">
-                        {formatCurrency((tx.fees as number) || 0)}
+                        {formatCurrency((tx.fees as number) || 0, txCurrency)}
                       </TableCell>
                       <TableCell>
                         <Button

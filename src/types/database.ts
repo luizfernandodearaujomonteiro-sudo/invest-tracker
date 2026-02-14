@@ -20,6 +20,23 @@ export type BrokerType = "broker" | "exchange" | "wallet";
 
 export type Currency = "BRL" | "USD";
 
+export type ChainId = "arbitrum" | "bsc" | "bitcoin" | "solana" | "xrpl";
+
+export interface WalletAddress {
+  chain: ChainId;
+  address: string;
+  label?: string;
+}
+
+export interface PriceAdjustment {
+  date: string;
+  oldPrice: number;
+  newPrice: number;
+  oldTotalInvested: number;
+  newTotalInvested: number;
+  note?: string;
+}
+
 export interface Database {
   public: {
     Tables: {
@@ -49,6 +66,8 @@ export interface Database {
           broker_type: BrokerType;
           icon_url: string | null;
           notes: string | null;
+          wallet_addresses: WalletAddress[] | null;
+          last_synced_at: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -59,12 +78,16 @@ export interface Database {
           broker_type?: BrokerType;
           icon_url?: string | null;
           notes?: string | null;
+          wallet_addresses?: WalletAddress[] | null;
+          last_synced_at?: string | null;
         };
         Update: {
           name?: string;
           broker_type?: BrokerType;
           icon_url?: string | null;
           notes?: string | null;
+          wallet_addresses?: WalletAddress[] | null;
+          last_synced_at?: string | null;
         };
       };
       assets: {
@@ -115,6 +138,7 @@ export interface Database {
           fixed_income_index: string | null;
           maturity_date: string | null;
           notes: string | null;
+          price_adjustments: PriceAdjustment[];
           created_at: string;
           updated_at: string;
         };
@@ -130,6 +154,7 @@ export interface Database {
           fixed_income_index?: string | null;
           maturity_date?: string | null;
           notes?: string | null;
+          price_adjustments?: PriceAdjustment[];
         };
         Update: {
           total_quantity?: number;
@@ -139,6 +164,7 @@ export interface Database {
           fixed_income_index?: string | null;
           maturity_date?: string | null;
           notes?: string | null;
+          price_adjustments?: PriceAdjustment[];
         };
       };
       transactions: {

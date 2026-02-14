@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
-import type { BrokerType } from "@/types/database";
+import type { BrokerType, WalletAddress } from "@/types/database";
 import { toast } from "sonner";
 
 export interface Broker {
@@ -11,6 +11,8 @@ export interface Broker {
   broker_type: BrokerType;
   icon_url: string | null;
   notes: string | null;
+  wallet_addresses: WalletAddress[] | null;
+  last_synced_at: string | null;
   created_at: string;
 }
 
