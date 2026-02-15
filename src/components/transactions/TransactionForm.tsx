@@ -41,18 +41,15 @@ interface TransactionFormProps {
   defaultBrokerId?: string;
 }
 
-// Subcategorias por mercado
-const SUBCATEGORIES: Record<string, { label: string; types: AssetType[] }[]> = {
-  br: [
-    { label: "Acoes", types: ["br_stock"] },
-    { label: "FIIs", types: ["br_fii"] },
-    { label: "ETFs", types: ["br_etf"] },
-    { label: "BDRs", types: ["br_bdr"] },
-  ],
-  us: [
-    { label: "Acoes US", types: ["us_stock"] },
-    { label: "ETFs US", types: ["us_etf"] },
-  ],
+const ASSET_TYPE_LABELS: Record<string, string> = {
+  br_stock: "Acao",
+  br_fii: "FII",
+  br_etf: "ETF",
+  br_bdr: "BDR",
+  us_stock: "Acao US",
+  us_etf: "ETF US",
+  crypto: "Crypto",
+  fixed_income: "Renda Fixa",
 };
 
 export function TransactionForm({
@@ -67,7 +64,6 @@ export function TransactionForm({
   const [assets, setAssets] = useState<Asset[]>([]);
   const [selectedAssetCache, setSelectedAssetCache] = useState<Asset | null>(null);
   const [market, setMarket] = useState(""); // br, us, crypto, fixed
-  const [subCategory, setSubCategory] = useState(""); // br_stock, br_fii, etc.
   const [assetId, setAssetId] = useState(defaultAssetId || "");
   const [brokerId, setBrokerId] = useState(defaultBrokerId || "");
   const [type, setType] = useState<TransactionType>("buy");
@@ -107,15 +103,14 @@ export function TransactionForm({
     return () => { cancelled = true; };
   }, [selectedAssetCache]);
 
-  // Tipos ativos baseados no mercado + subcategoria
+  // Tipos ativos baseados no mercado
   const activeTypes: AssetType[] = useMemo(() => {
     if (market === "crypto") return ["crypto"];
     if (market === "fixed") return ["fixed_income"];
-    if (subCategory) return [subCategory as AssetType];
     if (market === "br") return ["br_stock", "br_fii", "br_bdr", "br_etf"];
     if (market === "us") return ["us_stock", "us_etf"];
     return [];
-  }, [market, subCategory]);
+  }, [market]);
 
   // Busca ativos no Supabase quando o usuario digita 2+ caracteres
   useEffect(() => {
@@ -149,8 +144,7 @@ export function TransactionForm({
 
   const filteredAssets = assets;
 
-  const showSubCategory = market === "br" || market === "us";
-  const showAssetSearch = market === "crypto" || market === "fixed" || subCategory !== "";
+  const showAssetSearch = market !== "";
 
   // For crypto: user enters total paid, we calculate unit price
   const computedPricePerUnit = isCrypto
@@ -165,11 +159,11 @@ export function TransactionForm({
       ? (parseFloat(totalPaid) || 0) + (parseFloat(fees) || 0)
       : (parseFloat(quantity) || 0) * (parseFloat(pricePerUnit) || 0) + (parseFloat(fees) || 0);
 
-  // Determina o asset_type baseado no mercado + subcategoria
+  // Determina o asset_type baseado no mercado
   const getAssetTypeForCreation = (): AssetType => {
-    if (subCategory) return subCategory as AssetType;
     if (market === "crypto") return "crypto";
     if (market === "fixed") return "fixed_income";
+    if (market === "us") return "us_stock";
     return "br_stock";
   };
 
@@ -211,7 +205,6 @@ export function TransactionForm({
 
   const resetForm = () => {
     setMarket("");
-    setSubCategory("");
     setSearchTerm("");
     setSelectedAssetCache(null);
     setAssetId(defaultAssetId || "");
@@ -290,7 +283,6 @@ export function TransactionForm({
                 value={market}
                 onValueChange={(v) => {
                   setMarket(v);
-                  setSubCategory("");
                   setAssetId("");
                   setSearchTerm("");
                 }}
@@ -306,32 +298,6 @@ export function TransactionForm({
                 </SelectContent>
               </Select>
             </div>
-
-            {/* Subcategoria (BR ou US) */}
-            {showSubCategory && (
-              <div className="space-y-2">
-                <Label>Tipo de Ativo</Label>
-                <Select
-                  value={subCategory}
-                  onValueChange={(v) => {
-                    setSubCategory(v);
-                    setAssetId("");
-                    setSearchTerm("");
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione o tipo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(SUBCATEGORIES[market] || []).map((sub) => (
-                      <SelectItem key={sub.types[0]} value={sub.types[0]}>
-                        {sub.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
 
             {/* Asset search - Input com filtro */}
             {showAssetSearch && !creatingAsset && (
@@ -370,7 +336,10 @@ export function TransactionForm({
                         }}
                       >
                         <span className="font-medium">{asset.ticker}</span>
-                        <span className="text-muted-foreground">{asset.name}</span>
+                        <span className="text-muted-foreground flex-1">{asset.name}</span>
+                        <span className="text-xs bg-muted px-1.5 py-0.5 rounded text-muted-foreground">
+                          {ASSET_TYPE_LABELS[asset.asset_type] || asset.asset_type}
+                        </span>
                       </button>
                     ))}
                   </div>

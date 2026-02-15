@@ -33,17 +33,15 @@ interface Asset {
   currency: "BRL" | "USD";
 }
 
-const SUBCATEGORIES: Record<string, { label: string; types: AssetType[] }[]> = {
-  br: [
-    { label: "Acoes", types: ["br_stock"] },
-    { label: "FIIs", types: ["br_fii"] },
-    { label: "ETFs", types: ["br_etf"] },
-    { label: "BDRs", types: ["br_bdr"] },
-  ],
-  us: [
-    { label: "Acoes US", types: ["us_stock"] },
-    { label: "ETFs US", types: ["us_etf"] },
-  ],
+const ASSET_TYPE_LABELS: Record<string, string> = {
+  br_stock: "Acao",
+  br_fii: "FII",
+  br_etf: "ETF",
+  br_bdr: "BDR",
+  us_stock: "Acao US",
+  us_etf: "ETF US",
+  crypto: "Crypto",
+  fixed_income: "Renda Fixa",
 };
 
 const FII_TYPES: AssetType[] = ["br_fii"];
@@ -115,7 +113,6 @@ export function ImportPositionDialog({ open, onOpenChange }: ImportPositionDialo
   const [assets, setAssets] = useState<Asset[]>([]);
   const [selectedAssetCache, setSelectedAssetCache] = useState<Asset | null>(null);
   const [market, setMarket] = useState("");
-  const [subCategory, setSubCategory] = useState("");
   const [assetId, setAssetId] = useState("");
   const [brokerId, setBrokerId] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
@@ -135,11 +132,10 @@ export function ImportPositionDialog({ open, onOpenChange }: ImportPositionDialo
   const activeTypes: AssetType[] = useMemo(() => {
     if (market === "crypto") return ["crypto"];
     if (market === "fixed") return ["fixed_income"];
-    if (subCategory) return [subCategory as AssetType];
     if (market === "br") return ["br_stock", "br_fii", "br_bdr", "br_etf"];
     if (market === "us") return ["us_stock", "us_etf"];
     return [];
-  }, [market, subCategory]);
+  }, [market]);
 
   // Search assets
   useEffect(() => {
@@ -191,7 +187,6 @@ export function ImportPositionDialog({ open, onOpenChange }: ImportPositionDialo
     ? selectedAssetCache
     : assets.find((a) => a.id === assetId) || null;
   const currencySymbol = selectedAsset?.currency === "USD" ? "US$" : "R$";
-  const showSubCategory = market === "br" || market === "us";
   const showAssetSearch = market !== "";
 
   const isFII = selectedAsset ? FII_TYPES.includes(selectedAsset.asset_type) : false;
@@ -211,7 +206,6 @@ export function ImportPositionDialog({ open, onOpenChange }: ImportPositionDialo
 
   const resetForm = useCallback(() => {
     setMarket("");
-    setSubCategory("");
     setSearchTerm("");
     setSelectedAssetCache(null);
     setAssetId("");
@@ -275,7 +269,6 @@ export function ImportPositionDialog({ open, onOpenChange }: ImportPositionDialo
                 value={market}
                 onValueChange={(v) => {
                   setMarket(v);
-                  setSubCategory("");
                   setAssetId("");
                   setSearchTerm("");
                   setCurrentPrice(null);
@@ -292,33 +285,6 @@ export function ImportPositionDialog({ open, onOpenChange }: ImportPositionDialo
                 </SelectContent>
               </Select>
             </div>
-
-            {/* Subcategoria */}
-            {showSubCategory && (
-              <div className="space-y-2">
-                <Label>Tipo de Ativo</Label>
-                <Select
-                  value={subCategory}
-                  onValueChange={(v) => {
-                    setSubCategory(v);
-                    setAssetId("");
-                    setSearchTerm("");
-                    setCurrentPrice(null);
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione o tipo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(SUBCATEGORIES[market] || []).map((sub) => (
-                      <SelectItem key={sub.types[0]} value={sub.types[0]}>
-                        {sub.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
 
             {/* Asset search */}
             {showAssetSearch && (
@@ -352,7 +318,10 @@ export function ImportPositionDialog({ open, onOpenChange }: ImportPositionDialo
                         }}
                       >
                         <span className="font-medium">{asset.ticker}</span>
-                        <span className="text-muted-foreground">{asset.name}</span>
+                        <span className="text-muted-foreground flex-1">{asset.name}</span>
+                        <span className="text-xs bg-muted px-1.5 py-0.5 rounded text-muted-foreground">
+                          {ASSET_TYPE_LABELS[asset.asset_type] || asset.asset_type}
+                        </span>
                       </button>
                     ))}
                   </div>
