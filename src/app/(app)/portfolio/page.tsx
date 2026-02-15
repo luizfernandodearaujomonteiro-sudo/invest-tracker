@@ -10,23 +10,17 @@ import { TransactionForm } from "@/components/transactions/TransactionForm";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, RefreshCw, Loader2 } from "lucide-react";
+import { Plus, RefreshCw, Loader2, Upload } from "lucide-react";
 import { toast } from "sonner";
+import { ImportPositionDialog } from "@/components/portfolio/ImportPositionDialog";
 
 export default function PortfolioPage() {
   const { data: assets, isLoading } = usePortfolio();
   const { data: brokers } = useBrokers();
   const walletSync = useWalletSync();
-  const [brokerFilter, setBrokerFilter] = useState("all");
   const [txFormOpen, setTxFormOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [syncingWallets, setSyncingWallets] = useState(false);
 
   const walletBrokers = (brokers || []).filter(
@@ -55,9 +49,7 @@ export default function PortfolioPage() {
     }
   };
 
-  const filteredAssets = (assets || []).filter((a) =>
-    brokerFilter === "all" ? true : a.brokerId === brokerFilter
-  );
+  const allAssets = assets || [];
 
   return (
     <div className="space-y-6">
@@ -83,28 +75,15 @@ export default function PortfolioPage() {
               Atualizar Criptos
             </Button>
           )}
+          <Button variant="outline" onClick={() => setImportOpen(true)}>
+            <Upload className="mr-2 h-4 w-4" />
+            Importar Posicao
+          </Button>
           <Button onClick={() => setTxFormOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />
             Nova Transacao
           </Button>
         </div>
-      </div>
-
-      {/* Broker filter */}
-      <div className="flex items-center gap-4">
-        <Select value={brokerFilter} onValueChange={setBrokerFilter}>
-          <SelectTrigger className="w-48">
-            <SelectValue placeholder="Todas corretoras" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todas Corretoras</SelectItem>
-            {(brokers || []).map((b) => (
-              <SelectItem key={b.id} value={b.id}>
-                {b.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
       </div>
 
       {isLoading ? (
@@ -113,7 +92,7 @@ export default function PortfolioPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">
-              {filteredAssets.length} ativo(s)
+              {allAssets.length} ativo(s)
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -126,36 +105,30 @@ export default function PortfolioPage() {
                 <TabsTrigger value="fixed">Renda Fixa</TabsTrigger>
               </TabsList>
               <TabsContent value="all" className="mt-4">
-                <PortfolioTable assets={filteredAssets} />
+                <PortfolioTable assets={allAssets} />
               </TabsContent>
               <TabsContent value="br" className="mt-4">
                 <PortfolioTable
-                  assets={filteredAssets.filter((a) =>
-                    ["br_stock", "br_fii", "br_bdr", "br_etf"].includes(
-                      a.assetType
-                    )
+                  assets={allAssets.filter((a) =>
+                    ["br_stock", "br_fii", "br_bdr", "br_etf"].includes(a.assetType)
                   )}
                 />
               </TabsContent>
               <TabsContent value="us" className="mt-4">
                 <PortfolioTable
-                  assets={filteredAssets.filter((a) =>
+                  assets={allAssets.filter((a) =>
                     ["us_stock", "us_etf"].includes(a.assetType)
                   )}
                 />
               </TabsContent>
               <TabsContent value="crypto" className="mt-4">
                 <PortfolioTable
-                  assets={filteredAssets.filter(
-                    (a) => a.assetType === "crypto"
-                  )}
+                  assets={allAssets.filter((a) => a.assetType === "crypto")}
                 />
               </TabsContent>
               <TabsContent value="fixed" className="mt-4">
                 <PortfolioTable
-                  assets={filteredAssets.filter(
-                    (a) => a.assetType === "fixed_income"
-                  )}
+                  assets={allAssets.filter((a) => a.assetType === "fixed_income")}
                 />
               </TabsContent>
             </Tabs>
@@ -164,6 +137,7 @@ export default function PortfolioPage() {
       )}
 
       <TransactionForm open={txFormOpen} onOpenChange={setTxFormOpen} />
+      <ImportPositionDialog open={importOpen} onOpenChange={setImportOpen} />
     </div>
   );
 }

@@ -19,24 +19,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
 import { useCreateTransaction } from "@/hooks/useTransactions";
 import { useBrokers } from "@/hooks/useBrokers";
 import { createClient } from "@/lib/supabase/client";
-import { Loader2, Check, ChevronsUpDown, PlusCircle } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Loader2, PlusCircle } from "lucide-react";
 import { toast } from "sonner";
 import type { TransactionType, AssetType } from "@/types/database";
 
@@ -79,6 +65,7 @@ export function TransactionForm({
   const { data: brokers } = useBrokers();
 
   const [assets, setAssets] = useState<Asset[]>([]);
+  const [selectedAssetCache, setSelectedAssetCache] = useState<Asset | null>(null);
   const [market, setMarket] = useState(""); // br, us, crypto, fixed
   const [subCategory, setSubCategory] = useState(""); // br_stock, br_fii, etc.
   const [assetId, setAssetId] = useState(defaultAssetId || "");
@@ -95,28 +82,30 @@ export function TransactionForm({
   const [fixedIncomeIndex, setFixedIncomeIndex] = useState("");
   const [fixedIncomeRate, setFixedIncomeRate] = useState("");
   const [maturityDate, setMaturityDate] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
   const [creatingAsset, setCreatingAsset] = useState(false);
   const [newTicker, setNewTicker] = useState("");
   const [newName, setNewName] = useState("");
-  const [assetComboOpen, setAssetComboOpen] = useState(false);
+  const [fetchingPrice, setFetchingPrice] = useState(false);
 
+  // Busca preco atual quando um ativo e selecionado
   useEffect(() => {
-    const supabase = createClient();
-    const fetchAssets = async () => {
-      const { data } = await supabase
-        .from("invest_assets")
-        .select("id, ticker, name, asset_type, currency")
-        .eq("is_active", true)
-        .order("ticker");
-      if (data) setAssets(data as Asset[]);
-    };
-    if (open) fetchAssets();
-  }, [open]);
-
-  const selectedAsset = assets.find((a) => a.id === assetId);
-  const isFixedIncome = selectedAsset?.asset_type === "fixed_income";
-  const isCrypto = selectedAsset?.asset_type === "crypto";
-  const currencySymbol = selectedAsset?.currency === "USD" ? "US$" : "R$";
+    if (!selectedAssetCache || selectedAssetCache.asset_type === "fixed_income") return;
+    let cancelled = false;
+    setFetchingPrice(true);
+    fetch(`/api/prices?tickers=${selectedAssetCache.ticker}`)
+      .then((res) => res.ok ? res.json() : null)
+      .then((data) => {
+        if (cancelled || !data) return;
+        const priceInfo = data[selectedAssetCache.ticker];
+        if (priceInfo?.currentPrice) {
+          setPricePerUnit(String(priceInfo.currentPrice));
+        }
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setFetchingPrice(false); });
+    return () => { cancelled = true; };
+  }, [selectedAssetCache]);
 
   // Tipos ativos baseados no mercado + subcategoria
   const activeTypes: AssetType[] = useMemo(() => {
@@ -128,11 +117,37 @@ export function TransactionForm({
     return [];
   }, [market, subCategory]);
 
-  // Filtra ativos por tipo (Command faz a busca por texto)
-  const filteredAssets = useMemo(() => {
-    if (activeTypes.length === 0) return [];
-    return assets.filter((a) => activeTypes.includes(a.asset_type));
-  }, [assets, activeTypes]);
+  // Busca ativos no Supabase quando o usuario digita 2+ caracteres
+  useEffect(() => {
+    if (searchTerm.length < 2 || activeTypes.length === 0) {
+      setAssets([]);
+      return;
+    }
+    const supabase = createClient();
+    const timer = setTimeout(async () => {
+      const term = `%${searchTerm}%`;
+      const { data } = await supabase
+        .from("invest_assets")
+        .select("id, ticker, name, asset_type, currency")
+        .eq("is_active", true)
+        .in("asset_type", activeTypes)
+        .or(`ticker.ilike.${term},name.ilike.${term}`)
+        .order("ticker")
+        .limit(20);
+      if (data) setAssets(data as Asset[]);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchTerm, activeTypes]);
+
+  const selectedAsset = selectedAssetCache?.id === assetId
+    ? selectedAssetCache
+    : assets.find((a) => a.id === assetId) || null;
+  const isFixedIncome = selectedAsset?.asset_type === "fixed_income";
+  const isCrypto = selectedAsset?.asset_type === "crypto";
+  const isDividend = type === "dividend";
+  const currencySymbol = selectedAsset?.currency === "USD" ? "US$" : "R$";
+
+  const filteredAssets = assets;
 
   const showSubCategory = market === "br" || market === "us";
   const showAssetSearch = market === "crypto" || market === "fixed" || subCategory !== "";
@@ -144,9 +159,11 @@ export function TransactionForm({
       : 0
     : parseFloat(pricePerUnit) || 0;
 
-  const totalValue = isCrypto
-    ? (parseFloat(totalPaid) || 0) + (parseFloat(fees) || 0)
-    : (parseFloat(quantity) || 0) * (parseFloat(pricePerUnit) || 0) + (parseFloat(fees) || 0);
+  const totalValue = isDividend
+    ? (parseFloat(pricePerUnit) || 0)
+    : isCrypto
+      ? (parseFloat(totalPaid) || 0) + (parseFloat(fees) || 0)
+      : (parseFloat(quantity) || 0) * (parseFloat(pricePerUnit) || 0) + (parseFloat(fees) || 0);
 
   // Determina o asset_type baseado no mercado + subcategoria
   const getAssetTypeForCreation = (): AssetType => {
@@ -181,8 +198,11 @@ export function TransactionForm({
     }
 
     // Adiciona ao array local e seleciona
-    setAssets((prev) => [...prev, data as Asset].sort((a, b) => a.ticker.localeCompare(b.ticker)));
-    setAssetId(data.id);
+    const created = data as Asset;
+    setAssets((prev) => [...prev, created].sort((a, b) => a.ticker.localeCompare(b.ticker)));
+    setAssetId(created.id);
+    setSelectedAssetCache(created);
+    setSearchTerm(created.ticker);
     setCreatingAsset(false);
     setNewTicker("");
     setNewName("");
@@ -192,6 +212,8 @@ export function TransactionForm({
   const resetForm = () => {
     setMarket("");
     setSubCategory("");
+    setSearchTerm("");
+    setSelectedAssetCache(null);
     setAssetId(defaultAssetId || "");
     setBrokerId(defaultBrokerId || "");
     setType("buy");
@@ -215,9 +237,11 @@ export function TransactionForm({
       assetId,
       brokerId,
       type,
-      quantity: isFixedIncome ? 1 : parseFloat(quantity),
-      pricePerUnit: isCrypto ? computedPricePerUnit : parseFloat(pricePerUnit),
-      fees: parseFloat(fees) || 0,
+      quantity: isFixedIncome || isDividend ? 1 : parseFloat(quantity),
+      pricePerUnit: isDividend
+        ? parseFloat(pricePerUnit)
+        : isCrypto ? computedPricePerUnit : parseFloat(pricePerUnit),
+      fees: isDividend ? 0 : parseFloat(fees) || 0,
       executedAt: new Date(executedAt).toISOString(),
       notes: notes || undefined,
       fixedIncomeIndex: isFixedIncome ? fixedIncomeIndex : undefined,
@@ -268,6 +292,7 @@ export function TransactionForm({
                   setMarket(v);
                   setSubCategory("");
                   setAssetId("");
+                  setSearchTerm("");
                 }}
               >
                 <SelectTrigger>
@@ -291,6 +316,7 @@ export function TransactionForm({
                   onValueChange={(v) => {
                     setSubCategory(v);
                     setAssetId("");
+                    setSearchTerm("");
                   }}
                 >
                   <SelectTrigger>
@@ -307,63 +333,53 @@ export function TransactionForm({
               </div>
             )}
 
-            {/* Asset search - Combobox com busca integrada */}
+            {/* Asset search - Input com filtro */}
             {showAssetSearch && !creatingAsset && (
               <div className="space-y-2">
                 <Label>Ativo</Label>
-                <Popover open={assetComboOpen} onOpenChange={setAssetComboOpen}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      role="combobox"
-                      aria-expanded={assetComboOpen}
-                      className="w-full justify-between font-normal"
-                      type="button"
-                    >
-                      {selectedAsset
-                        ? `${selectedAsset.ticker} - ${selectedAsset.name}`
-                        : "Buscar ativo..."}
-                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                    <Command>
-                      <CommandInput
-                        placeholder={
-                          market === "crypto"
-                            ? "Buscar... (BTC, Bitcoin)"
-                            : market === "fixed"
-                              ? "Buscar... (CDB, Tesouro)"
-                              : "Buscar... (ticker ou nome)"
-                        }
-                      />
-                      <CommandList>
-                        <CommandEmpty>Nenhum ativo encontrado</CommandEmpty>
-                        <CommandGroup>
-                          {filteredAssets.map((asset) => (
-                            <CommandItem
-                              key={asset.id}
-                              value={`${asset.ticker} ${asset.name}`}
-                              onSelect={() => {
-                                setAssetId(asset.id);
-                                setAssetComboOpen(false);
-                              }}
-                            >
-                              <Check
-                                className={cn(
-                                  "mr-2 h-4 w-4",
-                                  assetId === asset.id ? "opacity-100" : "opacity-0"
-                                )}
-                              />
-                              <span className="font-medium">{asset.ticker}</span>
-                              <span className="ml-1.5 text-muted-foreground">{asset.name}</span>
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
+                <Input
+                  placeholder={
+                    market === "crypto"
+                      ? "Buscar... (BTC, Bitcoin)"
+                      : market === "fixed"
+                        ? "Buscar... (CDB, Tesouro)"
+                        : "Buscar... (ticker ou nome)"
+                  }
+                  value={searchTerm}
+                  onChange={(e) => {
+                    setSearchTerm(e.target.value);
+                    setAssetId("");
+                  }}
+                />
+                {selectedAsset && (
+                  <div className="text-sm text-primary font-medium">
+                    Selecionado: {selectedAsset.ticker} - {selectedAsset.name}
+                  </div>
+                )}
+                {searchTerm.length >= 2 && filteredAssets.length > 0 && !selectedAsset && (
+                  <div className="max-h-48 overflow-y-auto rounded-md border">
+                    {filteredAssets.map((asset) => (
+                      <button
+                        key={asset.id}
+                        type="button"
+                        className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-accent text-left"
+                        onClick={() => {
+                          setAssetId(asset.id);
+                          setSearchTerm(asset.ticker);
+                          setSelectedAssetCache(asset);
+                        }}
+                      >
+                        <span className="font-medium">{asset.ticker}</span>
+                        <span className="text-muted-foreground">{asset.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {searchTerm.length >= 2 && filteredAssets.length === 0 && !selectedAsset && (
+                  <div className="text-sm text-muted-foreground py-2">
+                    Nenhum ativo encontrado
+                  </div>
+                )}
                 <button
                   type="button"
                   className="flex items-center gap-1.5 text-sm text-primary hover:underline"
@@ -496,68 +512,103 @@ export function TransactionForm({
             {/* Quantity & Price - so mostra apos selecionar ativo */}
             {assetId && (
               <>
-                <div className="grid grid-cols-2 gap-4">
-                  {!isFixedIncome && (
+                {isDividend ? (
+                  /* Dividendo: campo unico de valor */
+                  <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label>Quantidade</Label>
+                      <Label>Proventos Acumulados ({currencySymbol})</Label>
                       <Input
                         type="number"
                         step="any"
                         min="0"
-                        placeholder="0"
-                        value={quantity}
-                        onChange={(e) => setQuantity(e.target.value)}
+                        placeholder="0.00"
+                        value={pricePerUnit}
+                        onChange={(e) => setPricePerUnit(e.target.value)}
                         required
                       />
                     </div>
-                  )}
-                  <div className={isFixedIncome ? "col-span-2 space-y-2" : "space-y-2"}>
-                    <Label>
-                      {isFixedIncome
-                        ? "Valor Aplicado (R$)"
-                        : isCrypto
-                          ? `Valor Pago (${currencySymbol})`
-                          : `Preco Unitario (${currencySymbol})`}
-                    </Label>
-                    <Input
-                      type="number"
-                      step="any"
-                      min="0"
-                      placeholder="0.00"
-                      value={isCrypto ? totalPaid : pricePerUnit}
-                      onChange={(e) => isCrypto ? setTotalPaid(e.target.value) : setPricePerUnit(e.target.value)}
-                      required
-                    />
+                    <div className="space-y-2">
+                      <Label>Data</Label>
+                      <Input
+                        type="date"
+                        value={executedAt}
+                        onChange={(e) => setExecutedAt(e.target.value)}
+                        required
+                      />
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  /* Compra/Venda/Transfer: campos normais */
+                  <>
+                    <div className="grid grid-cols-2 gap-4">
+                      {!isFixedIncome && (
+                        <div className="space-y-2">
+                          <Label>Quantidade</Label>
+                          <Input
+                            type="number"
+                            step="any"
+                            min="0"
+                            placeholder="0"
+                            value={quantity}
+                            onChange={(e) => setQuantity(e.target.value)}
+                            required
+                          />
+                        </div>
+                      )}
+                      <div className={isFixedIncome ? "col-span-2 space-y-2" : "space-y-2"}>
+                        <Label>
+                          {isFixedIncome
+                            ? "Valor Aplicado (R$)"
+                            : isCrypto
+                              ? `Valor Pago (${currencySymbol})`
+                              : `Preco Unitario (${currencySymbol})`}
+                        </Label>
+                        <Input
+                          type="number"
+                          step="any"
+                          min="0"
+                          placeholder={fetchingPrice ? "Buscando..." : "0.00"}
+                          value={isCrypto ? totalPaid : pricePerUnit}
+                          onChange={(e) => isCrypto ? setTotalPaid(e.target.value) : setPricePerUnit(e.target.value)}
+                          required
+                        />
+                        {!isCrypto && !isFixedIncome && pricePerUnit && !fetchingPrice && (
+                          <div className="text-xs text-muted-foreground">Preco atual preenchido automaticamente</div>
+                        )}
+                      </div>
+                    </div>
 
-                {/* Fees & Date */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Taxas</Label>
-                    <Input
-                      type="number"
-                      step="any"
-                      min="0"
-                      placeholder="0.00"
-                      value={fees}
-                      onChange={(e) => setFees(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Data</Label>
-                    <Input
-                      type="date"
-                      value={executedAt}
-                      onChange={(e) => setExecutedAt(e.target.value)}
-                      required
-                    />
-                  </div>
-                </div>
+                    {/* Fees & Date */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Taxas</Label>
+                        <Input
+                          type="number"
+                          step="any"
+                          min="0"
+                          placeholder="0.00"
+                          value={fees}
+                          onChange={(e) => setFees(e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Data</Label>
+                        <Input
+                          type="date"
+                          value={executedAt}
+                          onChange={(e) => setExecutedAt(e.target.value)}
+                          required
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
 
                 {/* Total */}
                 <div className="rounded-lg border bg-muted/50 p-3">
-                  <div className="text-sm text-muted-foreground">Valor Total</div>
+                  <div className="text-sm text-muted-foreground">
+                    {isDividend ? "Valor dos Proventos" : "Valor Total"}
+                  </div>
                   <div className="text-lg font-bold">
                     {currencySymbol} {totalValue.toFixed(2)}
                   </div>

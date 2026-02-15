@@ -20,8 +20,8 @@ export function PercentBadge({ value, className }: PercentBadgeProps) {
     );
   }
 
-  const isPositive = value > 0;
-  const isNeutral = value === 0;
+  const isNeutral = Math.abs(value) < 0.01;
+  const isPositive = !isNeutral && value > 0;
 
   return (
     <Badge

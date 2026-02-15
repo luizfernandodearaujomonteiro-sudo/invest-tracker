@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import type { PortfolioAsset, PortfolioSummary, CurrencySummaries } from "@/types/portfolio";
-import type { AssetType, Currency } from "@/types/database";
+import type { AssetType, Currency, ManualOverrides } from "@/types/database";
 
 interface HoldingRow {
   id: string;
@@ -21,6 +21,7 @@ interface HoldingRow {
     newTotalInvested: number;
     note?: string;
   }> | null;
+  manual_overrides: ManualOverrides | null;
   broker_id: string;
   invest_brokers: { name: string };
   asset_id: string;
@@ -58,6 +59,7 @@ export function usePortfolio() {
           fixed_income_index,
           maturity_date,
           price_adjustments,
+          manual_overrides,
           broker_id,
           invest_brokers ( name ),
           asset_id,
@@ -127,6 +129,8 @@ export function usePortfolio() {
           profitLossPercent,
           logoUrl: h.invest_assets.logo_url,
           priceAdjustments: h.price_adjustments || [],
+          dividendsAccumulated: 0,
+          manualOverrides: h.manual_overrides || null,
           fixedIncomeIndex: h.fixed_income_index,
           fixedIncomeRate: h.fixed_income_rate ? Number(h.fixed_income_rate) : null,
           maturityDate: h.maturity_date,
@@ -156,6 +160,31 @@ export function usePortfolio() {
           }
         } catch (e) {
           console.error("Erro ao buscar valores de renda fixa:", e);
+        }
+      }
+
+      // Buscar proventos (dividendos) acumulados por holding
+      const holdingIds = portfolioAssets.map((a) => a.holdingId);
+      if (holdingIds.length > 0) {
+        try {
+          const { data: dividendTxs } = await supabase
+            .from("invest_transactions")
+            .select("holding_id, total_value")
+            .in("holding_id", holdingIds)
+            .eq("type", "dividend");
+
+          if (dividendTxs) {
+            const dividendMap = new Map<string, number>();
+            for (const tx of dividendTxs) {
+              const current = dividendMap.get(tx.holding_id) || 0;
+              dividendMap.set(tx.holding_id, current + Number(tx.total_value));
+            }
+            for (const asset of portfolioAssets) {
+              asset.dividendsAccumulated = dividendMap.get(asset.holdingId) || 0;
+            }
+          }
+        } catch (e) {
+          console.error("Erro ao buscar proventos:", e);
         }
       }
 

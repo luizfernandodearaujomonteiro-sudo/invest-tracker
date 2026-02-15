@@ -1,4 +1,4 @@
-import type { AssetType, Currency, PriceAdjustment } from "./database";
+import type { AssetType, Currency, PriceAdjustment, ManualOverrides } from "./database";
 
 export interface PortfolioAsset {
   holdingId: string;
@@ -19,6 +19,8 @@ export interface PortfolioAsset {
   profitLossPercent: number | null;
   logoUrl: string | null;
   priceAdjustments: PriceAdjustment[];
+  dividendsAccumulated: number;
+  manualOverrides: ManualOverrides | null;
   // Renda fixa (opcional)
   fixedIncomeIndex?: string | null;
   fixedIncomeRate?: number | null;

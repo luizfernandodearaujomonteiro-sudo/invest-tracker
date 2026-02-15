@@ -20,13 +20,15 @@ import {
 } from "@/components/ui/select";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { Loader2, RefreshCw, Database } from "lucide-react";
 
 export default function SettingsPage() {
   const [displayName, setDisplayName] = useState("");
   const [currency, setCurrency] = useState("BRL");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [syncingBr, setSyncingBr] = useState(false);
+  const [syncingUs, setSyncingUs] = useState(false);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -75,6 +77,44 @@ export default function SettingsPage() {
     setSaving(false);
   };
 
+  const handleSyncBr = async () => {
+    setSyncingBr(true);
+    try {
+      const res = await fetch("/api/seed-assets", { method: "POST" });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success("Ativos BR sincronizados!", {
+          description: `${data.totalInserted} novos, ${data.totalSkipped} ja existentes.`,
+        });
+      } else {
+        toast.error("Erro ao sincronizar BR", { description: data.error });
+      }
+    } catch {
+      toast.error("Erro ao sincronizar ativos BR");
+    } finally {
+      setSyncingBr(false);
+    }
+  };
+
+  const handleSyncUs = async () => {
+    setSyncingUs(true);
+    try {
+      const res = await fetch("/api/seed-us-assets", { method: "POST" });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success("Ativos US sincronizados!", {
+          description: `${data.totalInserted} novos, ${data.totalSkipped} ja existentes.`,
+        });
+      } else {
+        toast.error("Erro ao sincronizar US", { description: data.error });
+      }
+    } catch {
+      toast.error("Erro ao sincronizar ativos US");
+    } finally {
+      setSyncingUs(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -91,6 +131,38 @@ export default function SettingsPage() {
           Gerencie suas preferencias
         </p>
       </div>
+
+      <Card className="max-w-lg">
+        <CardHeader>
+          <CardTitle className="text-base">Base de Ativos</CardTitle>
+          <CardDescription>
+            Sincronize os ativos para que aparecam na busca ao importar posicoes. Ativos ja existentes nao serao duplicados.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex items-center gap-3">
+            <Button onClick={handleSyncBr} disabled={syncingBr} variant="outline">
+              {syncingBr ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Database className="mr-2 h-4 w-4" />
+              )}
+              {syncingBr ? "Sincronizando..." : "Sincronizar B3 (Brasil)"}
+            </Button>
+            <Button onClick={handleSyncUs} disabled={syncingUs} variant="outline">
+              {syncingUs ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Database className="mr-2 h-4 w-4" />
+              )}
+              {syncingUs ? "Sincronizando..." : "Sincronizar US (EUA)"}
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            B3: Puxa acoes, FIIs, ETFs e BDRs via Brapi. US: Adiciona ~350 acoes (S&P 500), ~130 ETFs e ~50 REITs americanos.
+          </p>
+        </CardContent>
+      </Card>
 
       <Card className="max-w-lg">
         <CardHeader>

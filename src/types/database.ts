@@ -37,6 +37,12 @@ export interface PriceAdjustment {
   note?: string;
 }
 
+export interface ManualOverrides {
+  dividendsAccumulated?: number;
+  rentComProventos?: number;
+  rentBruta?: number;
+}
+
 export interface Database {
   public: {
     Tables: {
