@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { fetchPrice } from "@/lib/api/price-fetcher";
+import { detectBrAssetType } from "@/lib/api/brapi";
 import type { AssetType } from "@/types/database";
 
 function getSupabase() {
@@ -60,6 +61,8 @@ export async function GET(request: Request) {
   }
 
   // Fetch missing prices
+  const brAssetTypes: AssetType[] = ["br_stock", "br_fii", "br_bdr", "br_etf"];
+
   const fetchPromises = toFetch.map(async (asset) => {
     try {
       if (asset.asset_type === "fixed_income") return;
@@ -69,6 +72,23 @@ export async function GET(request: Request) {
         asset.asset_type as AssetType,
         asset.coingecko_id
       );
+
+      // Auto-corrigir tipo de ativo BR baseado no nome retornado pela brapi
+      if (brAssetTypes.includes(asset.asset_type as AssetType) && "longName" in price) {
+        const detectedType = detectBrAssetType(
+          (price as { longName?: string }).longName,
+          asset.ticker
+        );
+        if (detectedType && detectedType !== asset.asset_type) {
+          console.log(
+            `Auto-corrigindo tipo de ${asset.ticker}: ${asset.asset_type} → ${detectedType}`
+          );
+          await supabase
+            .from("invest_assets")
+            .update({ asset_type: detectedType })
+            .eq("id", asset.id);
+        }
+      }
 
       // Upsert cache
       await supabase.from("invest_price_cache").upsert(
