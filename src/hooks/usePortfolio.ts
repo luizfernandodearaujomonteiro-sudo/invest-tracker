@@ -72,7 +72,7 @@ export function usePortfolio() {
 
       // Fetch prices via API (populates cache and returns fresh data)
       const nonFixedTickers = (holdings as unknown as HoldingRow[])
-        .filter((h) => h.invest_assets.asset_type !== "fixed_income")
+        .filter((h) => h.invest_assets.asset_type !== "fixed_income" && h.invest_assets.asset_type !== "fund")
         .map((h) => h.invest_assets.ticker);
 
       const tickerPriceMap = new Map<string, { currentPrice: number; changePercent: number | null }>();
@@ -151,15 +151,41 @@ export function usePortfolio() {
             for (const asset of portfolioAssets) {
               const fi = results[asset.holdingId];
               if (fi) {
-                asset.currentValue = fi.netValue;
-                asset.currentPrice = fi.netValue;
-                asset.profitLoss = fi.netValue - asset.totalInvested;
-                asset.profitLossPercent = fi.netReturn;
+                asset.currentValue = fi.grossValue;
+                asset.currentPrice = fi.grossValue;
+                asset.profitLoss = fi.grossValue - asset.totalInvested;
+                asset.profitLossPercent = fi.grossReturn;
               }
             }
           }
         } catch (e) {
           console.error("Erro ao buscar valores de renda fixa:", e);
+        }
+      }
+
+      // Buscar valores de fundos de investimento via CVM
+      const fundHoldings = portfolioAssets.filter(
+        (a) => a.assetType === "fund" && a.currentValue === null
+      );
+
+      if (fundHoldings.length > 0) {
+        const fundHoldingIds = fundHoldings.map((a) => a.holdingId).join(",");
+        try {
+          const res = await fetch(`/api/funds/nav?holdings=${fundHoldingIds}`);
+          if (res.ok) {
+            const { results } = await res.json();
+            for (const asset of portfolioAssets) {
+              const fund = results[asset.holdingId];
+              if (fund) {
+                asset.currentPrice = fund.vlQuota;
+                asset.currentValue = fund.currentValue;
+                asset.profitLoss = fund.profitLoss;
+                asset.profitLossPercent = fund.profitLossPercent;
+              }
+            }
+          }
+        } catch (e) {
+          console.error("Erro ao buscar valores de fundos:", e);
         }
       }
 

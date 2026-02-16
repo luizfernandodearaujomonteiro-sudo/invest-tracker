@@ -23,6 +23,7 @@ import { useImportPosition } from "@/hooks/useImportPosition";
 import { useBrokers } from "@/hooks/useBrokers";
 import { createClient } from "@/lib/supabase/client";
 import { Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import type { AssetType } from "@/types/database";
 
 interface Asset {
@@ -42,7 +43,16 @@ const ASSET_TYPE_LABELS: Record<string, string> = {
   us_etf: "ETF US",
   crypto: "Crypto",
   fixed_income: "Renda Fixa",
+  fund: "Fundo",
 };
+
+interface CvmFundResult {
+  cnpj: string;
+  name: string;
+  classe: string;
+  gestor: string;
+  admin: string;
+}
 
 const FII_TYPES: AssetType[] = ["br_fii"];
 const STOCK_TYPES: AssetType[] = ["br_stock", "us_stock", "br_etf", "us_etf", "br_bdr"];
@@ -52,6 +62,37 @@ const FIXED_INCOME_INDICES = [
   { value: "ipca", label: "IPCA+" },
   { value: "prefixado", label: "Prefixado" },
 ];
+
+// Auto-detecta indice e taxa pelo ticker/nome do ativo de renda fixa
+function detectFixedIncomeIndex(ticker: string, name: string): { index: string; rate: string; rateEditable: boolean } {
+  const t = ticker.toUpperCase();
+  const n = name.toUpperCase();
+
+  // Tesouro Selic / LFT → sempre 100% da SELIC
+  if (t.includes("SELIC") || n.includes("LFT")) {
+    return { index: "selic", rate: "100", rateEditable: false };
+  }
+  // Tesouro IPCA+ / NTN-B → IPCA + spread (usuario precisa informar)
+  if (t.includes("IPCA") || n.includes("NTNB") || n.includes("NTN-B") || t === "TD-RENDA") {
+    return { index: "ipca", rate: "", rateEditable: true };
+  }
+  // Tesouro Prefixado / LTN / NTN-F
+  if (t.includes("PRE") || n.includes("LTN") || n.includes("NTNF") || n.includes("NTN-F") || n.includes("PREFIXADO")) {
+    return { index: "prefixado", rate: "", rateEditable: true };
+  }
+  // CDB/LCI/LCA/CRA/LC CDI (CDB sem IPCA/PRE no nome = CDI por padrao)
+  if (t.includes("CDI") || n.includes("CDI")) {
+    return { index: "cdi", rate: "100", rateEditable: true };
+  }
+  if (t.includes("CDB") || n.includes("CDB")) {
+    return { index: "cdi", rate: "100", rateEditable: true };
+  }
+  if (t.includes("LCI") || t.includes("LCA") || t.includes("CRI") || t.includes("CRA") || t.includes("LC-")) {
+    return { index: "cdi", rate: "100", rateEditable: true };
+  }
+  // Fallback: nao conseguiu detectar
+  return { index: "", rate: "", rateEditable: true };
+}
 
 function formatCurrencyInput(raw: string): string {
   if (!raw) return "";
@@ -138,22 +179,59 @@ export function ImportPositionDialog({ open, onOpenChange }: ImportPositionDialo
   const [fixedIncomeRateRaw, setFixedIncomeRateRaw] = useState("");
   const [maturityDate, setMaturityDate] = useState("");
   const [snapshotValueRaw, setSnapshotValueRaw] = useState("");
+  // Criar novo ativo de renda fixa
+  const [showCreateAsset, setShowCreateAsset] = useState(false);
+  const [newAssetName, setNewAssetName] = useState("");
+  const [creatingAsset, setCreatingAsset] = useState(false);
+  // Fund-specific state
+  const [fundSearchResults, setFundSearchResults] = useState<CvmFundResult[]>([]);
+  const [searchingFunds, setSearchingFunds] = useState(false);
+  const [fundTotalAppliedRaw, setFundTotalAppliedRaw] = useState("");
+  const [fundCurrentValueRaw, setFundCurrentValueRaw] = useState("");
+  const [fundVlQuota, setFundVlQuota] = useState<number | null>(null);
+  const [fetchingQuota, setFetchingQuota] = useState(false);
+  const [fundCnpj, setFundCnpj] = useState("");
 
+  const isFundMarket = market === "funds";
 
   const activeTypes: AssetType[] = useMemo(() => {
     if (market === "crypto") return ["crypto"];
     if (market === "fixed") return ["fixed_income"];
+    if (market === "funds") return ["fund"];
     if (market === "br") return ["br_stock", "br_fii", "br_bdr", "br_etf"];
     if (market === "us") return ["us_stock", "us_etf"];
     return [];
   }, [market]);
 
-  // Search assets
+  // Search assets (Supabase for non-fund, CVM API for funds)
   useEffect(() => {
     if (searchTerm.length < 2 || activeTypes.length === 0) {
       setAssets([]);
+      setFundSearchResults([]);
       return;
     }
+
+    if (isFundMarket) {
+      // Fund search via CVM API
+      if (searchTerm.length < 3) return;
+      const timer = setTimeout(async () => {
+        setSearchingFunds(true);
+        try {
+          const res = await fetch(`/api/funds/search?q=${encodeURIComponent(searchTerm)}`);
+          if (res.ok) {
+            const data = await res.json();
+            setFundSearchResults(data.results || []);
+          }
+        } catch {
+          setFundSearchResults([]);
+        } finally {
+          setSearchingFunds(false);
+        }
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+
+    // Regular asset search via Supabase
     const supabase = createClient();
     const timer = setTimeout(async () => {
       const term = `%${searchTerm}%`;
@@ -168,11 +246,11 @@ export function ImportPositionDialog({ open, onOpenChange }: ImportPositionDialo
       if (data) setAssets(data as Asset[]);
     }, 300);
     return () => clearTimeout(timer);
-  }, [searchTerm, activeTypes]);
+  }, [searchTerm, activeTypes, isFundMarket]);
 
   // Auto-fetch current price when asset is selected
   useEffect(() => {
-    if (!selectedAssetCache || selectedAssetCache.asset_type === "fixed_income") {
+    if (!selectedAssetCache || selectedAssetCache.asset_type === "fixed_income" || selectedAssetCache.asset_type === "fund") {
       setCurrentPrice(null);
       return;
     }
@@ -194,6 +272,27 @@ export function ImportPositionDialog({ open, onOpenChange }: ImportPositionDialo
     return () => { cancelled = true; };
   }, [selectedAssetCache]);
 
+  // Auto-fetch VL_QUOTA when a fund is selected
+  useEffect(() => {
+    if (!fundCnpj || !selectedAssetCache || selectedAssetCache.asset_type !== "fund") {
+      setFundVlQuota(null);
+      return;
+    }
+    let cancelled = false;
+    setFetchingQuota(true);
+    fetch(`/api/funds/quota?cnpj=${fundCnpj}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (cancelled || !data) return;
+        if (data.vlQuota) setFundVlQuota(data.vlQuota);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setFetchingQuota(false);
+      });
+    return () => { cancelled = true; };
+  }, [fundCnpj, selectedAssetCache]);
+
   const selectedAsset = selectedAssetCache?.id === assetId
     ? selectedAssetCache
     : assets.find((a) => a.id === assetId) || null;
@@ -203,6 +302,16 @@ export function ImportPositionDialog({ open, onOpenChange }: ImportPositionDialo
   const isFII = selectedAsset ? FII_TYPES.includes(selectedAsset.asset_type) : false;
   const isStock = selectedAsset ? STOCK_TYPES.includes(selectedAsset.asset_type) : false;
   const isFixedIncome = selectedAsset?.asset_type === "fixed_income";
+  const isFund = selectedAsset?.asset_type === "fund";
+
+  // Detecta se a taxa e editavel baseado no ativo selecionado
+  const fixedIncomeDetected = useMemo(() => {
+    if (!selectedAsset || selectedAsset.asset_type !== "fixed_income") return null;
+    return detectFixedIncomeIndex(selectedAsset.ticker, selectedAsset.name);
+  }, [selectedAsset]);
+
+  const isRateEditable = fixedIncomeDetected?.rateEditable ?? true;
+  const detectedIndexLabel = FIXED_INCOME_INDICES.find(i => i.value === fixedIncomeIndex)?.label || fixedIncomeIndex;
 
   const avgPrice = parseCurrencyInput(averagePriceRaw);
   const qty = parseFloat(quantity) || 0;
@@ -232,12 +341,39 @@ export function ImportPositionDialog({ open, onOpenChange }: ImportPositionDialo
     setFixedIncomeRateRaw("");
     setMaturityDate("");
     setSnapshotValueRaw("");
+    setShowCreateAsset(false);
+    setNewAssetName("");
+    setFundSearchResults([]);
+    setSearchingFunds(false);
+    setFundTotalAppliedRaw("");
+    setFundCurrentValueRaw("");
+    setFundVlQuota(null);
+    setFetchingQuota(false);
+    setFundCnpj("");
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (isFixedIncome) {
+    if (isFund) {
+      const totalApplied = parseCurrencyInput(fundTotalAppliedRaw);
+      const currentVal = parseCurrencyInput(fundCurrentValueRaw);
+
+      // Derive cotas from current position / VL_QUOTA
+      let cotas = 1;
+      let avgPrice = totalApplied;
+      if (fundVlQuota && fundVlQuota > 0 && currentVal > 0) {
+        cotas = currentVal / fundVlQuota;
+        avgPrice = totalApplied / cotas;
+      }
+
+      await importPosition.mutateAsync({
+        assetId,
+        brokerId,
+        quantity: cotas,
+        averagePrice: avgPrice,
+      });
+    } else if (isFixedIncome) {
       const snapshotVal = parseCurrencyInput(snapshotValueRaw);
       const totalApplied = parseCurrencyInput(averagePriceRaw);
       const rateVal = parseFloat(fixedIncomeRateRaw) || 0;
@@ -313,6 +449,7 @@ export function ImportPositionDialog({ open, onOpenChange }: ImportPositionDialo
                   <SelectItem value="us">Internacional</SelectItem>
                   <SelectItem value="crypto">Criptomoedas</SelectItem>
                   <SelectItem value="fixed">Renda Fixa</SelectItem>
+                  <SelectItem value="funds">Fundos de Investimento</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -335,7 +472,85 @@ export function ImportPositionDialog({ open, onOpenChange }: ImportPositionDialo
                     Selecionado: {selectedAsset.ticker} - {selectedAsset.name}
                   </div>
                 )}
-                {searchTerm.length >= 2 && assets.length > 0 && !selectedAsset && (
+                {/* Fund search results (from CVM) */}
+                {isFundMarket && searchingFunds && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    Buscando fundos...
+                  </div>
+                )}
+                {isFundMarket && !searchingFunds && searchTerm.length >= 3 && fundSearchResults.length > 0 && !selectedAsset && (
+                  <div className="max-h-48 overflow-y-auto rounded-md border">
+                    {fundSearchResults.map((fund) => (
+                      <button
+                        key={fund.cnpj}
+                        type="button"
+                        className="flex w-full flex-col gap-0.5 px-3 py-2 text-sm hover:bg-accent text-left"
+                        onClick={async () => {
+                          // Create fund asset via API
+                          setCreatingAsset(true);
+                          try {
+                            const ticker = fund.name
+                              .toUpperCase()
+                              .replace(/[^A-Z0-9\s]/g, "")
+                              .split(/\s+/)
+                              .filter((w: string) => !["DE", "EM", "DO", "DA", "E", "A", "O", "FUNDO", "INVESTIMENTO", "INVESTIMENTOS", "RESPONSABILIDADE", "LIMITADA", "RL"].includes(w))
+                              .slice(0, 3)
+                              .join("-") || "FUNDO";
+                            const res = await fetch("/api/assets/create", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({
+                                ticker,
+                                name: fund.name,
+                                assetType: "fund",
+                                currency: "BRL",
+                                exchange: "CVM",
+                                cnpj: fund.cnpj,
+                              }),
+                            });
+                            const data = await res.json();
+                            if (!res.ok || data.error) {
+                              toast.error("Erro ao criar ativo", {
+                                description: data.error || "Verifique se a migration 010 foi rodada no Supabase",
+                              });
+                              return;
+                            }
+                            if (data.asset) {
+                              const created = data.asset as Asset;
+                              setAssetId(created.id);
+                              setSearchTerm(created.name);
+                              setSelectedAssetCache(created);
+                              setFundSearchResults([]);
+                              setFundCnpj(fund.cnpj);
+                            }
+                          } catch (err) {
+                            toast.error("Erro ao criar ativo de fundo", {
+                              description: String(err),
+                            });
+                          } finally {
+                            setCreatingAsset(false);
+                          }
+                        }}
+                      >
+                        <span className="font-medium text-xs">{fund.name}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground">CNPJ: {fund.cnpj}</span>
+                          <span className="text-xs bg-muted px-1.5 py-0.5 rounded text-muted-foreground">{fund.classe}</span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {isFundMarket && !searchingFunds && searchTerm.length >= 3 && fundSearchResults.length === 0 && !selectedAsset && (
+                  <div className="text-sm text-muted-foreground py-2">
+                    <p>Nenhum fundo encontrado.</p>
+                    <p className="text-xs mt-1">Dica: Use o nome oficial CVM (ex: &quot;TREND VALOR BRASIL&quot; em vez de nomes comerciais). Sincronize o cadastro CVM nas Configuracoes primeiro.</p>
+                  </div>
+                )}
+
+                {/* Regular asset search results (Supabase) */}
+                {!isFundMarket && searchTerm.length >= 2 && assets.length > 0 && !selectedAsset && (
                   <div className="max-h-48 overflow-y-auto rounded-md border">
                     {assets.map((asset) => (
                       <button
@@ -346,6 +561,13 @@ export function ImportPositionDialog({ open, onOpenChange }: ImportPositionDialo
                           setAssetId(asset.id);
                           setSearchTerm(asset.ticker);
                           setSelectedAssetCache(asset);
+                          setShowCreateAsset(false);
+                          // Auto-detectar indice para renda fixa
+                          if (asset.asset_type === "fixed_income") {
+                            const detected = detectFixedIncomeIndex(asset.ticker, asset.name);
+                            setFixedIncomeIndex(detected.index);
+                            setFixedIncomeRateRaw(detected.rate);
+                          }
                         }}
                       >
                         <span className="font-medium">{asset.ticker}</span>
@@ -355,6 +577,84 @@ export function ImportPositionDialog({ open, onOpenChange }: ImportPositionDialo
                         </span>
                       </button>
                     ))}
+                  </div>
+                )}
+
+                {/* Criar novo ativo de renda fixa */}
+                {market === "fixed" && searchTerm.length >= 2 && !selectedAsset && !showCreateAsset && (
+                  <button
+                    type="button"
+                    className="text-sm text-primary hover:underline"
+                    onClick={() => {
+                      setShowCreateAsset(true);
+                      setNewAssetName(searchTerm);
+                    }}
+                  >
+                    Nao encontrou? Criar novo ativo de renda fixa
+                  </button>
+                )}
+
+                {showCreateAsset && !selectedAsset && (
+                  <div className="rounded-lg border p-3 space-y-3">
+                    <div className="text-sm font-medium">Novo ativo de renda fixa</div>
+                    <div className="space-y-2">
+                      <Label>Nome do produto</Label>
+                      <Input
+                        placeholder="Ex: CDB Banco XP JUN/2027"
+                        value={newAssetName}
+                        onChange={(e) => setNewAssetName(e.target.value)}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Use o nome que aparece na sua corretora
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={!newAssetName.trim() || creatingAsset}
+                      onClick={async () => {
+                        setCreatingAsset(true);
+                        // Gerar ticker a partir do nome
+                        const ticker = newAssetName
+                          .trim()
+                          .toUpperCase()
+                          .replace(/[^A-Z0-9/\- ]/g, "")
+                          .replace(/\s+/g, "-")
+                          .slice(0, 30);
+                        try {
+                          const res = await fetch("/api/assets/create", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                              ticker,
+                              name: newAssetName.trim(),
+                              assetType: "fixed_income",
+                              currency: "BRL",
+                              exchange: "Renda Fixa",
+                            }),
+                          });
+                          const data = await res.json();
+                          if (data.asset) {
+                            const created = data.asset as Asset;
+                            setAssetId(created.id);
+                            setSearchTerm(created.ticker);
+                            setSelectedAssetCache(created);
+                            setShowCreateAsset(false);
+                            // Auto-detectar indice
+                            const detected = detectFixedIncomeIndex(created.ticker, created.name);
+                            setFixedIncomeIndex(detected.index);
+                            setFixedIncomeRateRaw(detected.rate);
+                          }
+                        } catch {
+                          // silently fail
+                        } finally {
+                          setCreatingAsset(false);
+                        }
+                      }}
+                    >
+                      {creatingAsset && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
+                      Criar e selecionar
+                    </Button>
                   </div>
                 )}
               </div>
@@ -386,6 +686,85 @@ export function ImportPositionDialog({ open, onOpenChange }: ImportPositionDialo
                   <h3 className="text-sm font-medium mb-3">Dados da Posicao</h3>
                 </div>
 
+                {/* === FUNDO DE INVESTIMENTO: campos especificos === */}
+                {isFund ? (
+                  <>
+                    {/* VL_QUOTA loading/display */}
+                    {fetchingQuota && (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        Buscando valor da cota na CVM...
+                      </div>
+                    )}
+                    {fundVlQuota && !fetchingQuota && (
+                      <div className="rounded-lg border bg-muted/50 p-3">
+                        <div className="text-xs text-muted-foreground">Valor da Cota (VL_QUOTA CVM)</div>
+                        <div className="text-lg font-bold">
+                          R$ {fundVlQuota.toLocaleString("pt-BR", { minimumFractionDigits: 6, maximumFractionDigits: 6 })}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Valor Aplicado</Label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">R$</span>
+                          <Input
+                            className="pl-10"
+                            placeholder="0,00"
+                            value={formatCurrencyInput(fundTotalAppliedRaw)}
+                            onChange={(e) => handleMaskedChange(e, setFundTotalAppliedRaw)}
+                            required
+                          />
+                        </div>
+                        <p className="text-xs text-muted-foreground">Copie da XP</p>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Posicao Atual</Label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">R$</span>
+                          <Input
+                            className="pl-10"
+                            placeholder="0,00"
+                            value={formatCurrencyInput(fundCurrentValueRaw)}
+                            onChange={(e) => handleMaskedChange(e, setFundCurrentValueRaw)}
+                            required
+                          />
+                        </div>
+                        <p className="text-xs text-muted-foreground">Copie da XP</p>
+                      </div>
+                    </div>
+
+                    {/* Resumo calculado */}
+                    {parseCurrencyInput(fundTotalAppliedRaw) > 0 && parseCurrencyInput(fundCurrentValueRaw) > 0 && (
+                      <div className="rounded-lg border bg-muted/50 p-3 space-y-2">
+                        {fundVlQuota && fundVlQuota > 0 && (
+                          <div>
+                            <div className="text-xs text-muted-foreground">Cotas calculadas</div>
+                            <div className="text-sm font-medium">
+                              {(parseCurrencyInput(fundCurrentValueRaw) / fundVlQuota).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 6 })} cotas
+                            </div>
+                          </div>
+                        )}
+                        <div>
+                          <div className="text-xs text-muted-foreground">Rentabilidade</div>
+                          <div className={`text-lg font-bold ${parseCurrencyInput(fundCurrentValueRaw) >= parseCurrencyInput(fundTotalAppliedRaw) ? "text-emerald-600" : "text-red-600"}`}>
+                            R$ {(parseCurrencyInput(fundCurrentValueRaw) - parseCurrencyInput(fundTotalAppliedRaw)).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            {" "}
+                            ({(((parseCurrencyInput(fundCurrentValueRaw) / parseCurrencyInput(fundTotalAppliedRaw)) - 1) * 100).toFixed(2)}%)
+                          </div>
+                        </div>
+                        {!fundVlQuota && !fetchingQuota && (
+                          <p className="text-xs text-amber-500">
+                            Nao foi possivel buscar o VL_QUOTA da CVM. O fundo sera importado sem calculo automatico de cotas.
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                <>
                 {/* Preco Atual (auto-fetched, nao para renda fixa) */}
                 {!isFixedIncome && currentPrice !== null && (
                   <div className="rounded-lg border bg-muted/50 p-3">
@@ -405,55 +784,35 @@ export function ImportPositionDialog({ open, onOpenChange }: ImportPositionDialo
                 {/* === RENDA FIXA: campos especificos === */}
                 {isFixedIncome ? (
                   <>
-                    <div className="space-y-2">
-                      <Label>Total Aplicado (R$)</Label>
-                      <p className="text-xs text-muted-foreground">
-                        Valor total que voce investiu (soma de todos os aportes)
-                      </p>
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">R$</span>
-                        <Input
-                          className="pl-10"
-                          placeholder="0,00"
-                          value={formatCurrencyInput(averagePriceRaw)}
-                          onChange={(e) => handleMaskedChange(e, setAveragePriceRaw)}
-                          required
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Posicao Atual (R$)</Label>
-                      <p className="text-xs text-muted-foreground">
-                        Valor atual na corretora (inclui rendimentos acumulados)
-                      </p>
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">R$</span>
-                        <Input
-                          className="pl-10"
-                          placeholder="0,00"
-                          value={formatCurrencyInput(snapshotValueRaw)}
-                          onChange={(e) => handleMaskedChange(e, setSnapshotValueRaw)}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Rendimento calculado da importacao */}
-                    {parseCurrencyInput(averagePriceRaw) > 0 && parseCurrencyInput(snapshotValueRaw) > 0 && (
-                      <div className="rounded-lg border bg-muted/50 p-3">
-                        <div className="text-sm text-muted-foreground">Rendimento Acumulado</div>
-                        <div className={`text-lg font-bold ${parseCurrencyInput(snapshotValueRaw) >= parseCurrencyInput(averagePriceRaw) ? "text-emerald-600" : "text-red-600"}`}>
-                          R$ {(parseCurrencyInput(snapshotValueRaw) - parseCurrencyInput(averagePriceRaw)).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          {" "}
-                          ({(((parseCurrencyInput(snapshotValueRaw) / parseCurrencyInput(averagePriceRaw)) - 1) * 100).toFixed(2)}%)
+                    {/* Badge mostrando indice detectado */}
+                    {fixedIncomeIndex && (
+                      <div className="rounded-lg border bg-muted/50 p-3 flex items-center justify-between">
+                        <div>
+                          <div className="text-xs text-muted-foreground">Indice detectado</div>
+                          <div className="text-sm font-medium">
+                            {detectedIndexLabel}
+                            {!isRateEditable && ` ${fixedIncomeRateRaw}%`}
+                          </div>
                         </div>
+                        <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full">
+                          Automatico
+                        </span>
                       </div>
                     )}
 
-                    <div className="grid grid-cols-2 gap-4">
+                    {/* Indice manual (so aparece se nao foi detectado) */}
+                    {!fixedIncomeIndex && (
                       <div className="space-y-2">
                         <Label>Indice</Label>
-                        <Select value={fixedIncomeIndex} onValueChange={setFixedIncomeIndex}>
+                        <Select
+                          value={fixedIncomeIndex}
+                          onValueChange={(v) => {
+                            setFixedIncomeIndex(v);
+                            if (v === "selic") setFixedIncomeRateRaw("100");
+                            else if (v === "cdi") setFixedIncomeRateRaw("100");
+                            else setFixedIncomeRateRaw("");
+                          }}
+                        >
                           <SelectTrigger>
                             <SelectValue placeholder="Selecione" />
                           </SelectTrigger>
@@ -466,25 +825,75 @@ export function ImportPositionDialog({ open, onOpenChange }: ImportPositionDialo
                           </SelectContent>
                         </Select>
                       </div>
+                    )}
+
+                    {/* Taxa/Spread (so aparece quando editavel) */}
+                    {isRateEditable && fixedIncomeIndex && (
                       <div className="space-y-2">
                         <Label>
                           {fixedIncomeIndex === "cdi" ? "% do CDI" :
-                           fixedIncomeIndex === "ipca" ? "Taxa + IPCA (% a.a.)" :
-                           fixedIncomeIndex === "selic" ? "Spread SELIC (% a.a.)" :
+                           fixedIncomeIndex === "ipca" ? "Spread IPCA+ (% a.a.)" :
                            "Taxa (% a.a.)"}
+                          <span className="text-muted-foreground font-normal ml-1">(opcional)</span>
                         </Label>
+                        <p className="text-xs text-muted-foreground">
+                          {fixedIncomeIndex === "cdi" ? "Ex: CDB 100% do CDI" :
+                           fixedIncomeIndex === "ipca" ? "Ex: IPCA + 6,50% → digite 6.50. Se nao souber, deixe vazio." :
+                           fixedIncomeIndex === "prefixado" ? "Taxa fixa contratada" :
+                           "Deixe vazio se nao souber"}
+                        </p>
                         <div className="relative">
                           <Input
                             type="number"
                             step="0.01"
-                            placeholder={fixedIncomeIndex === "cdi" ? "100" : "0,00"}
+                            placeholder="0.00"
                             value={fixedIncomeRateRaw}
                             onChange={(e) => setFixedIncomeRateRaw(e.target.value)}
                           />
                           <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">%</span>
                         </div>
                       </div>
+                    )}
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Total Aplicado</Label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">R$</span>
+                          <Input
+                            className="pl-10"
+                            placeholder="0,00"
+                            value={formatCurrencyInput(averagePriceRaw)}
+                            onChange={(e) => handleMaskedChange(e, setAveragePriceRaw)}
+                            required
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Posicao Atual</Label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">R$</span>
+                          <Input
+                            className="pl-10"
+                            placeholder="0,00"
+                            value={formatCurrencyInput(snapshotValueRaw)}
+                            onChange={(e) => handleMaskedChange(e, setSnapshotValueRaw)}
+                          />
+                        </div>
+                      </div>
                     </div>
+
+                    {/* Rendimento calculado da importacao */}
+                    {parseCurrencyInput(averagePriceRaw) > 0 && parseCurrencyInput(snapshotValueRaw) > 0 && (
+                      <div className="rounded-lg border bg-muted/50 p-3">
+                        <div className="text-xs text-muted-foreground">Rendimento Acumulado</div>
+                        <div className={`text-lg font-bold ${parseCurrencyInput(snapshotValueRaw) >= parseCurrencyInput(averagePriceRaw) ? "text-emerald-600" : "text-red-600"}`}>
+                          R$ {(parseCurrencyInput(snapshotValueRaw) - parseCurrencyInput(averagePriceRaw)).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          {" "}
+                          ({(((parseCurrencyInput(snapshotValueRaw) / parseCurrencyInput(averagePriceRaw)) - 1) * 100).toFixed(2)}%)
+                        </div>
+                      </div>
+                    )}
 
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
@@ -633,6 +1042,8 @@ export function ImportPositionDialog({ open, onOpenChange }: ImportPositionDialo
                   </div>
                 )}
               </>
+              )}
+              </>
             )}
           </div>
           <DialogFooter>
@@ -643,7 +1054,7 @@ export function ImportPositionDialog({ open, onOpenChange }: ImportPositionDialo
             >
               Cancelar
             </Button>
-            <Button type="submit" disabled={importPosition.isPending || !assetId || !brokerId || (!isFixedIncome && !quantity) || (isFixedIncome && !averagePriceRaw)}>
+            <Button type="submit" disabled={importPosition.isPending || !assetId || !brokerId || (!isFixedIncome && !isFund && !quantity) || (isFixedIncome && !averagePriceRaw) || (isFund && (!fundTotalAppliedRaw || !fundCurrentValueRaw))}>
               {importPosition.isPending && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               )}

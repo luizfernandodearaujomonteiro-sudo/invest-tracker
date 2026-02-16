@@ -6,7 +6,8 @@ export type AssetType =
   | "us_stock"
   | "us_etf"
   | "crypto"
-  | "fixed_income";
+  | "fixed_income"
+  | "fund";
 
 export type TransactionType =
   | "buy"
@@ -105,6 +106,7 @@ export interface Database {
           currency: Currency;
           exchange: string | null;
           coingecko_id: string | null;
+          cnpj: string | null;
           logo_url: string | null;
           is_active: boolean;
           created_at: string;
@@ -117,6 +119,7 @@ export interface Database {
           currency?: Currency;
           exchange?: string | null;
           coingecko_id?: string | null;
+          cnpj?: string | null;
           logo_url?: string | null;
           is_active?: boolean;
         };
@@ -127,6 +130,7 @@ export interface Database {
           currency?: Currency;
           exchange?: string | null;
           coingecko_id?: string | null;
+          cnpj?: string | null;
           logo_url?: string | null;
           is_active?: boolean;
         };

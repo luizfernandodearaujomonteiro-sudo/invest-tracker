@@ -29,6 +29,7 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [syncingBr, setSyncingBr] = useState(false);
   const [syncingUs, setSyncingUs] = useState(false);
+  const [syncingFunds, setSyncingFunds] = useState(false);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -115,6 +116,25 @@ export default function SettingsPage() {
     }
   };
 
+  const handleSyncFunds = async () => {
+    setSyncingFunds(true);
+    try {
+      const res = await fetch("/api/funds/sync-registry", { method: "POST" });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success("Cadastro de fundos sincronizado!", {
+          description: `${data.totalActive.toLocaleString("pt-BR")} fundos ativos importados.`,
+        });
+      } else {
+        toast.error("Erro ao sincronizar fundos", { description: data.error });
+      }
+    } catch {
+      toast.error("Erro ao sincronizar cadastro de fundos");
+    } finally {
+      setSyncingFunds(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -140,7 +160,7 @@ export default function SettingsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <Button onClick={handleSyncBr} disabled={syncingBr} variant="outline">
               {syncingBr ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -157,9 +177,17 @@ export default function SettingsPage() {
               )}
               {syncingUs ? "Sincronizando..." : "Sincronizar US (EUA)"}
             </Button>
+            <Button onClick={handleSyncFunds} disabled={syncingFunds} variant="outline">
+              {syncingFunds ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="mr-2 h-4 w-4" />
+              )}
+              {syncingFunds ? "Sincronizando..." : "Sincronizar Fundos CVM"}
+            </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            B3: Puxa acoes, FIIs, ETFs e BDRs via Brapi. US: Adiciona ~350 acoes (S&P 500), ~130 ETFs e ~50 REITs americanos.
+            B3: Puxa acoes, FIIs, ETFs e BDRs via Brapi. US: Adiciona ~350 acoes (S&P 500), ~130 ETFs e ~50 REITs americanos. Fundos CVM: Baixa o cadastro completo (~30 mil fundos ativos) para busca instantanea ao importar fundos de investimento.
           </p>
         </CardContent>
       </Card>

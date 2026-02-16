@@ -103,6 +103,7 @@ export default function PortfolioPage() {
                 <TabsTrigger value="us">US</TabsTrigger>
                 <TabsTrigger value="crypto">Cripto</TabsTrigger>
                 <TabsTrigger value="fixed">Renda Fixa</TabsTrigger>
+                <TabsTrigger value="funds">Fundos</TabsTrigger>
               </TabsList>
               <TabsContent value="all" className="mt-4">
                 <PortfolioTable assets={allAssets} />
@@ -129,6 +130,11 @@ export default function PortfolioPage() {
               <TabsContent value="fixed" className="mt-4">
                 <PortfolioTable
                   assets={allAssets.filter((a) => a.assetType === "fixed_income")}
+                />
+              </TabsContent>
+              <TabsContent value="funds" className="mt-4">
+                <PortfolioTable
+                  assets={allAssets.filter((a) => a.assetType === "fund")}
                 />
               </TabsContent>
             </Tabs>

@@ -85,13 +85,13 @@ export function calculateFixedIncome(input: FixedIncomeInput): FixedIncomeResult
     }
 
     case "selic": {
-      // Tesouro Selic: acumula taxa diaria Selic + spread
-      const annualSpread = input.rate / 100;
-      const dailySpread = Math.pow(1 + annualSpread, 1 / 252) - 1;
+      // Tesouro Selic: acumula taxa diaria Selic * (% contratado)
+      // rate=100 significa 100% da Selic (padrao do Tesouro Selic)
+      const selicPercent = input.rate / 100; // 100 -> 1.00
       let accumulated = 1.0;
       for (const entry of input.rates) {
         const dailyRate = entry.value / 100;
-        accumulated *= 1 + dailyRate + dailySpread;
+        accumulated *= 1 + dailyRate * selicPercent;
       }
       grossValue = input.totalInvested * accumulated;
       break;

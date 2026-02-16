@@ -2,7 +2,9 @@
 
 import { useState, useMemo, Fragment } from "react";
 import Link from "next/link";
-import { ChevronRight, ChevronDown } from "lucide-react";
+import { ChevronRight, ChevronDown, Trash2, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useDeleteHolding } from "@/hooks/useDeleteHolding";
 import {
   Table,
   TableBody,
@@ -33,6 +35,7 @@ const CATEGORY_ORDER: { key: string; label: string; types: AssetType[] }[] = [
   { key: "etfs_us", label: "ETFs US", types: ["us_etf"] },
   { key: "crypto", label: "Criptomoedas", types: ["crypto"] },
   { key: "fixed", label: "Renda Fixa", types: ["fixed_income"] },
+  { key: "funds", label: "Fundos", types: ["fund"] },
 ];
 
 function getPriceColor(asset: PortfolioAsset): string {
@@ -305,6 +308,7 @@ export function PortfolioTable({ assets }: PortfolioTableProps) {
                                     ) : (
                                       <StockExpandedDetails asset={asset} />
                                     )}
+                                    <DeleteHoldingButton holdingId={asset.holdingId} ticker={asset.ticker} />
                                   </TableCell>
                                 </TableRow>
                               )}
@@ -427,6 +431,55 @@ function StockExpandedDetails({ asset }: { asset: PortfolioAsset }) {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+// Botao de deletar holding com confirmacao
+function DeleteHoldingButton({ holdingId, ticker }: { holdingId: string; ticker: string }) {
+  const [confirming, setConfirming] = useState(false);
+  const deleteHolding = useDeleteHolding();
+
+  const handleDelete = async () => {
+    await deleteHolding.mutateAsync(holdingId);
+    setConfirming(false);
+  };
+
+  return (
+    <div className="flex items-center justify-end gap-2 px-6 pb-3">
+      {confirming ? (
+        <>
+          <span className="text-xs text-muted-foreground">
+            Deletar {ticker} e todas as transacoes?
+          </span>
+          <Button
+            size="sm"
+            variant="destructive"
+            onClick={handleDelete}
+            disabled={deleteHolding.isPending}
+          >
+            {deleteHolding.isPending && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
+            Confirmar
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setConfirming(false)}
+          >
+            Cancelar
+          </Button>
+        </>
+      ) : (
+        <Button
+          size="sm"
+          variant="ghost"
+          className="text-muted-foreground hover:text-destructive"
+          onClick={() => setConfirming(true)}
+        >
+          <Trash2 className="mr-1 h-3 w-3" />
+          Deletar
+        </Button>
+      )}
     </div>
   );
 }

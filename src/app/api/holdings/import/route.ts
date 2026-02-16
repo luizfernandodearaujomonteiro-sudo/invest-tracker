@@ -46,7 +46,12 @@ export async function POST(request: Request) {
   }
 
   const safeAvgPrice = averagePrice || 0;
-  const totalInvested = quantity * safeAvgPrice;
+  const isFixedIncome = !!fixedIncomeIndex;
+
+  // Para renda fixa, averagePrice ja e o "Total Aplicado" (nao preco por unidade)
+  // Entao total_invested = averagePrice direto, sem multiplicar por quantidade
+  const totalInvested = isFixedIncome ? safeAvgPrice : quantity * safeAvgPrice;
+  const unitPrice = isFixedIncome && quantity > 0 ? safeAvgPrice / quantity : safeAvgPrice;
 
   // Build manual overrides
   const overrides: ManualOverrides = {};
@@ -82,7 +87,7 @@ export async function POST(request: Request) {
         broker_id: brokerId,
         asset_id: assetId,
         total_quantity: quantity,
-        average_price: safeAvgPrice,
+        average_price: unitPrice,
         total_invested: totalInvested,
         manual_overrides: manualOverrides,
         ...fixedFields,
@@ -98,7 +103,7 @@ export async function POST(request: Request) {
       .from("invest_holdings")
       .update({
         total_quantity: quantity,
-        average_price: safeAvgPrice,
+        average_price: unitPrice,
         total_invested: totalInvested,
         manual_overrides: manualOverrides,
         ...fixedFields,
@@ -114,7 +119,7 @@ export async function POST(request: Request) {
     holding_id: holding!.id,
     type: "buy",
     quantity,
-    price_per_unit: safeAvgPrice,
+    price_per_unit: unitPrice,
     total_value: totalInvested,
     fees: 0,
     executed_at: new Date().toISOString(),

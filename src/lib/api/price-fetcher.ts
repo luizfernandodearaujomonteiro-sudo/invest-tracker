@@ -28,6 +28,10 @@ export async function fetchPrice(
       // Fixed income doesn't have real-time market prices
       throw new Error("Fixed income has no market price API");
 
+    case "fund":
+      // Funds use CVM data, fetched separately
+      throw new Error("Fund prices fetched via CVM API");
+
     default:
       throw new Error(`Unknown asset type: ${assetType}`);
   }
@@ -95,6 +99,7 @@ export async function fetchHistory(
       return fetchCoinGeckoHistory(coingeckoId, DATE_RANGE_CG_DAYS[range]);
 
     case "fixed_income":
+    case "fund":
       return [];
 
     default:

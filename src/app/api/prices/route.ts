@@ -65,7 +65,7 @@ export async function GET(request: Request) {
 
   const fetchPromises = toFetch.map(async (asset) => {
     try {
-      if (asset.asset_type === "fixed_income") return;
+      if (asset.asset_type === "fixed_income" || asset.asset_type === "fund") return;
 
       const price = await fetchPrice(
         asset.ticker,

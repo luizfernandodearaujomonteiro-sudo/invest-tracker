@@ -9,6 +9,7 @@ export const ASSET_TYPE_LABELS: Record<AssetType, string> = {
   us_etf: "ETF US",
   crypto: "Cripto",
   fixed_income: "Renda Fixa",
+  fund: "Fundo",
 };
 
 export const ASSET_TYPE_COLORS: Record<AssetType, string> = {
@@ -20,6 +21,7 @@ export const ASSET_TYPE_COLORS: Record<AssetType, string> = {
   us_etf: "#ea580c",
   crypto: "#f59e0b",
   fixed_income: "#64748b",
+  fund: "#10b981",
 };
 
 export const BROKER_SUGGESTIONS = [
