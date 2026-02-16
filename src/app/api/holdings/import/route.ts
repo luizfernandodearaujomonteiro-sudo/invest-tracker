@@ -21,6 +21,11 @@ export async function POST(request: Request) {
     dividendsAccumulated,
     rentComProventos,
     rentBruta,
+    // Campos de renda fixa
+    fixedIncomeIndex,
+    fixedIncomeRate,
+    maturityDate,
+    snapshotValue,
   } = body as {
     userId: string;
     assetId: string;
@@ -30,6 +35,10 @@ export async function POST(request: Request) {
     dividendsAccumulated?: number;
     rentComProventos?: number;
     rentBruta?: number;
+    fixedIncomeIndex?: string;
+    fixedIncomeRate?: number;
+    maturityDate?: string;
+    snapshotValue?: number;
   };
 
   if (!userId || !assetId || !brokerId || !quantity) {
@@ -55,6 +64,16 @@ export async function POST(request: Request) {
     .eq("asset_id", assetId)
     .single();
 
+  // Campos extras para renda fixa
+  const fixedFields: Record<string, unknown> = {};
+  if (fixedIncomeIndex) fixedFields.fixed_income_index = fixedIncomeIndex;
+  if (fixedIncomeRate !== undefined) fixedFields.fixed_income_rate = fixedIncomeRate;
+  if (maturityDate) fixedFields.maturity_date = maturityDate;
+  if (snapshotValue) {
+    fixedFields.snapshot_value = snapshotValue;
+    fixedFields.snapshot_date = new Date().toISOString().split("T")[0];
+  }
+
   if (!holding) {
     const { data: newHolding, error } = await supabase
       .from("invest_holdings")
@@ -66,6 +85,7 @@ export async function POST(request: Request) {
         average_price: safeAvgPrice,
         total_invested: totalInvested,
         manual_overrides: manualOverrides,
+        ...fixedFields,
       })
       .select("id")
       .single();
@@ -81,6 +101,7 @@ export async function POST(request: Request) {
         average_price: safeAvgPrice,
         total_invested: totalInvested,
         manual_overrides: manualOverrides,
+        ...fixedFields,
       })
       .eq("id", holding.id);
 

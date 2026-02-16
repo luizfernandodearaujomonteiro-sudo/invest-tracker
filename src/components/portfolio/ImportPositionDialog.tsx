@@ -46,6 +46,12 @@ const ASSET_TYPE_LABELS: Record<string, string> = {
 
 const FII_TYPES: AssetType[] = ["br_fii"];
 const STOCK_TYPES: AssetType[] = ["br_stock", "us_stock", "br_etf", "us_etf", "br_bdr"];
+const FIXED_INCOME_INDICES = [
+  { value: "cdi", label: "CDI" },
+  { value: "selic", label: "SELIC" },
+  { value: "ipca", label: "IPCA+" },
+  { value: "prefixado", label: "Prefixado" },
+];
 
 function formatCurrencyInput(raw: string): string {
   if (!raw) return "";
@@ -127,6 +133,11 @@ export function ImportPositionDialog({ open, onOpenChange }: ImportPositionDialo
   const [dividendsRaw, setDividendsRaw] = useState("");
   const [rentProvRaw, setRentProvRaw] = useState("");
   const [rentBrutaRaw, setRentBrutaRaw] = useState("");
+  // Renda fixa fields
+  const [fixedIncomeIndex, setFixedIncomeIndex] = useState("");
+  const [fixedIncomeRateRaw, setFixedIncomeRateRaw] = useState("");
+  const [maturityDate, setMaturityDate] = useState("");
+  const [snapshotValueRaw, setSnapshotValueRaw] = useState("");
 
 
   const activeTypes: AssetType[] = useMemo(() => {
@@ -191,6 +202,7 @@ export function ImportPositionDialog({ open, onOpenChange }: ImportPositionDialo
 
   const isFII = selectedAsset ? FII_TYPES.includes(selectedAsset.asset_type) : false;
   const isStock = selectedAsset ? STOCK_TYPES.includes(selectedAsset.asset_type) : false;
+  const isFixedIncome = selectedAsset?.asset_type === "fixed_income";
 
   const avgPrice = parseCurrencyInput(averagePriceRaw);
   const qty = parseFloat(quantity) || 0;
@@ -216,12 +228,31 @@ export function ImportPositionDialog({ open, onOpenChange }: ImportPositionDialo
     setDividendsRaw("");
     setRentProvRaw("");
     setRentBrutaRaw("");
+    setFixedIncomeIndex("");
+    setFixedIncomeRateRaw("");
+    setMaturityDate("");
+    setSnapshotValueRaw("");
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (isFII) {
+    if (isFixedIncome) {
+      const snapshotVal = parseCurrencyInput(snapshotValueRaw);
+      const totalApplied = parseCurrencyInput(averagePriceRaw);
+      const rateVal = parseFloat(fixedIncomeRateRaw) || 0;
+
+      await importPosition.mutateAsync({
+        assetId,
+        brokerId,
+        quantity: parseFloat(quantity) || 1,
+        averagePrice: totalApplied,
+        fixedIncomeIndex: fixedIncomeIndex || undefined,
+        fixedIncomeRate: rateVal || undefined,
+        maturityDate: maturityDate || undefined,
+        snapshotValue: snapshotVal > 0 ? snapshotVal : undefined,
+      });
+    } else if (isFII) {
       const dividendsValue = parseCurrencyInput(dividendsRaw);
       const rentProvValue = parsePercentInput(rentProvRaw);
       const rentBrutaValue = parsePercentInput(rentBrutaRaw);
@@ -355,8 +386,8 @@ export function ImportPositionDialog({ open, onOpenChange }: ImportPositionDialo
                   <h3 className="text-sm font-medium mb-3">Dados da Posicao</h3>
                 </div>
 
-                {/* Preco Atual (auto-fetched) */}
-                {currentPrice !== null && (
+                {/* Preco Atual (auto-fetched, nao para renda fixa) */}
+                {!isFixedIncome && currentPrice !== null && (
                   <div className="rounded-lg border bg-muted/50 p-3">
                     <div className="text-sm text-muted-foreground">Preco Atual</div>
                     <div className="text-lg font-bold">
@@ -364,50 +395,160 @@ export function ImportPositionDialog({ open, onOpenChange }: ImportPositionDialo
                     </div>
                   </div>
                 )}
-                {fetchingPrice && (
+                {!isFixedIncome && fetchingPrice && (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Loader2 className="h-3 w-3 animate-spin" />
                     Buscando preco atual...
                   </div>
                 )}
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Quantidade</Label>
-                    <Input
-                      type="number"
-                      step="any"
-                      min="0"
-                      placeholder="0"
-                      value={quantity}
-                      onChange={(e) => setQuantity(e.target.value)}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Preco Medio ({currencySymbol})</Label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                        {currencySymbol}
-                      </span>
-                      <Input
-                        className="pl-10"
-                        placeholder="0,00"
-                        value={formatCurrencyInput(averagePriceRaw)}
-                        onChange={(e) => handleMaskedChange(e, setAveragePriceRaw)}
-                      />
+                {/* === RENDA FIXA: campos especificos === */}
+                {isFixedIncome ? (
+                  <>
+                    <div className="space-y-2">
+                      <Label>Total Aplicado (R$)</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Valor total que voce investiu (soma de todos os aportes)
+                      </p>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">R$</span>
+                        <Input
+                          className="pl-10"
+                          placeholder="0,00"
+                          value={formatCurrencyInput(averagePriceRaw)}
+                          onChange={(e) => handleMaskedChange(e, setAveragePriceRaw)}
+                          required
+                        />
+                      </div>
                     </div>
-                  </div>
-                </div>
 
-                {/* Total investido */}
-                {totalInvested > 0 && (
-                  <div className="rounded-lg border bg-muted/50 p-3">
-                    <div className="text-sm text-muted-foreground">Total Investido</div>
-                    <div className="text-lg font-bold">
-                      {currencySymbol} {totalInvested.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    <div className="space-y-2">
+                      <Label>Posicao Atual (R$)</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Valor atual na corretora (inclui rendimentos acumulados)
+                      </p>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">R$</span>
+                        <Input
+                          className="pl-10"
+                          placeholder="0,00"
+                          value={formatCurrencyInput(snapshotValueRaw)}
+                          onChange={(e) => handleMaskedChange(e, setSnapshotValueRaw)}
+                        />
+                      </div>
                     </div>
-                  </div>
+
+                    {/* Rendimento calculado da importacao */}
+                    {parseCurrencyInput(averagePriceRaw) > 0 && parseCurrencyInput(snapshotValueRaw) > 0 && (
+                      <div className="rounded-lg border bg-muted/50 p-3">
+                        <div className="text-sm text-muted-foreground">Rendimento Acumulado</div>
+                        <div className={`text-lg font-bold ${parseCurrencyInput(snapshotValueRaw) >= parseCurrencyInput(averagePriceRaw) ? "text-emerald-600" : "text-red-600"}`}>
+                          R$ {(parseCurrencyInput(snapshotValueRaw) - parseCurrencyInput(averagePriceRaw)).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          {" "}
+                          ({(((parseCurrencyInput(snapshotValueRaw) / parseCurrencyInput(averagePriceRaw)) - 1) * 100).toFixed(2)}%)
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Indice</Label>
+                        <Select value={fixedIncomeIndex} onValueChange={setFixedIncomeIndex}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {FIXED_INCOME_INDICES.map((idx) => (
+                              <SelectItem key={idx.value} value={idx.value}>
+                                {idx.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>
+                          {fixedIncomeIndex === "cdi" ? "% do CDI" :
+                           fixedIncomeIndex === "ipca" ? "Taxa + IPCA (% a.a.)" :
+                           fixedIncomeIndex === "selic" ? "Spread SELIC (% a.a.)" :
+                           "Taxa (% a.a.)"}
+                        </Label>
+                        <div className="relative">
+                          <Input
+                            type="number"
+                            step="0.01"
+                            placeholder={fixedIncomeIndex === "cdi" ? "100" : "0,00"}
+                            value={fixedIncomeRateRaw}
+                            onChange={(e) => setFixedIncomeRateRaw(e.target.value)}
+                          />
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">%</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Quantidade</Label>
+                        <Input
+                          type="number"
+                          step="any"
+                          min="0"
+                          placeholder="1"
+                          value={quantity}
+                          onChange={(e) => setQuantity(e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Vencimento</Label>
+                        <Input
+                          type="date"
+                          value={maturityDate}
+                          onChange={(e) => setMaturityDate(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Quantidade</Label>
+                        <Input
+                          type="number"
+                          step="any"
+                          min="0"
+                          placeholder="0"
+                          value={quantity}
+                          onChange={(e) => setQuantity(e.target.value)}
+                          required
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Preco Medio ({currencySymbol})</Label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                            {currencySymbol}
+                          </span>
+                          <Input
+                            className="pl-10"
+                            placeholder="0,00"
+                            value={formatCurrencyInput(averagePriceRaw)}
+                            onChange={(e) => handleMaskedChange(e, setAveragePriceRaw)}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Total investido */}
+                    {totalInvested > 0 && (
+                      <div className="rounded-lg border bg-muted/50 p-3">
+                        <div className="text-sm text-muted-foreground">Total Investido</div>
+                        <div className="text-lg font-bold">
+                          {currencySymbol} {totalInvested.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
 
                 {/* === FII: Proventos + Rent c/ Prov + Rent Bruta === */}
@@ -502,7 +643,7 @@ export function ImportPositionDialog({ open, onOpenChange }: ImportPositionDialo
             >
               Cancelar
             </Button>
-            <Button type="submit" disabled={importPosition.isPending || !assetId || !brokerId || !quantity}>
+            <Button type="submit" disabled={importPosition.isPending || !assetId || !brokerId || (!isFixedIncome && !quantity) || (isFixedIncome && !averagePriceRaw)}>
               {importPosition.isPending && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               )}

@@ -43,6 +43,8 @@ export async function GET(request: Request) {
       fixed_income_rate,
       fixed_income_index,
       maturity_date,
+      snapshot_value,
+      snapshot_date,
       asset_id,
       invest_assets ( id, ticker, name, asset_type )
     `)
@@ -94,7 +96,7 @@ export async function GET(request: Request) {
   });
   await Promise.allSettled(fetchPromises);
 
-  // Calcular valor para cada holding (somando cada aporte individualmente)
+  // Calcular valor para cada holding
   const results: Record<string, FixedIncomeApiResult> = {};
 
   for (const h of holdings) {
@@ -103,48 +105,88 @@ export async function GET(request: Request) {
     const index = holding.fixed_income_index as FixedIncomeIndex;
     const rate = Number(holding.fixed_income_rate) || 0;
     const ticker = asset.ticker as string;
+    const totalInvestedDb = Number(holding.total_invested) || 0;
+    const snapshotValue = holding.snapshot_value ? Number(holding.snapshot_value) : null;
+    const snapshotDate = holding.snapshot_date ? new Date(holding.snapshot_date as string) : null;
     const txList = txByHolding.get(h.id);
 
-    if (!txList || txList.length === 0 || !index) continue;
+    if (!index) continue;
 
-    // Calcular cada aporte individualmente e somar
     let totalGrossValue = 0;
     let totalNetValue = 0;
     let totalIof = 0;
     let totalIr = 0;
-    let totalInvested = 0;
+    let totalInvested = totalInvestedDb;
+    let holdingDays = 0;
 
-    for (const tx of txList) {
-      const purchaseDate = new Date(tx.date);
-      const purchaseDateStr = purchaseDate.toISOString().split("T")[0];
+    if (snapshotValue && snapshotDate) {
+      // Modo snapshot: usa valor importado da corretora como base
+      // e calcula rendimento "pra frente" desde a data do snapshot
+      const snapshotDateStr = snapshotDate.toISOString().split("T")[0];
 
       let rates: Array<{ date: string; value: number }> = [];
       if (index !== "prefixado") {
         const allRates = ratesMap.get(index as BcbIndex) || [];
-        rates = allRates.filter((r) => r.date >= purchaseDateStr);
+        rates = allRates.filter((r) => r.date >= snapshotDateStr);
       }
 
       const result = calculateFixedIncome({
-        totalInvested: tx.amount,
-        purchaseDate,
+        totalInvested: snapshotValue, // base = valor no snapshot (nao o total investido)
+        purchaseDate: snapshotDate,
         index,
         rate,
         ticker,
         rates,
       });
 
-      totalGrossValue += result.grossValue;
-      totalNetValue += result.netValue;
-      totalIof += result.iofAmount;
-      totalIr += result.irAmount;
-      totalInvested += tx.amount;
-    }
+      // grossValue ja inclui rendimento desde snapshot
+      totalGrossValue = result.grossValue;
+      // IOF/IR incidem sobre o rendimento TOTAL (desde investimento original)
+      const totalGrossProfit = totalGrossValue - totalInvested;
+      holdingDays = Math.max(result.holdingDays, 30); // snapshot implica posicao antiga
+      totalIof = 0; // posicao importada ja passou dos 30 dias de IOF
+      if (totalGrossProfit > 0) {
+        const irRate = 0.15; // posicao antiga: assume aliquota minima (>720 dias)
+        totalIr = totalGrossProfit * irRate;
+      }
+      totalNetValue = totalGrossValue - totalIof - totalIr;
+    } else if (txList && txList.length > 0) {
+      // Modo transacoes: calcula cada aporte individualmente
+      totalInvested = 0;
 
-    // Usar a data do primeiro aporte para holdingDays
-    const firstPurchase = new Date(txList[0].date);
-    const holdingDays = Math.floor(
-      (Date.now() - firstPurchase.getTime()) / (1000 * 60 * 60 * 24)
-    );
+      for (const tx of txList) {
+        const purchaseDate = new Date(tx.date);
+        const purchaseDateStr = purchaseDate.toISOString().split("T")[0];
+
+        let rates: Array<{ date: string; value: number }> = [];
+        if (index !== "prefixado") {
+          const allRates = ratesMap.get(index as BcbIndex) || [];
+          rates = allRates.filter((r) => r.date >= purchaseDateStr);
+        }
+
+        const result = calculateFixedIncome({
+          totalInvested: tx.amount,
+          purchaseDate,
+          index,
+          rate,
+          ticker,
+          rates,
+        });
+
+        totalGrossValue += result.grossValue;
+        totalNetValue += result.netValue;
+        totalIof += result.iofAmount;
+        totalIr += result.irAmount;
+        totalInvested += tx.amount;
+      }
+
+      const firstPurchase = new Date(txList[0].date);
+      holdingDays = Math.floor(
+        (Date.now() - firstPurchase.getTime()) / (1000 * 60 * 60 * 24)
+      );
+    } else {
+      continue;
+    }
 
     const grossReturn = totalInvested > 0
       ? ((totalGrossValue - totalInvested) / totalInvested) * 100

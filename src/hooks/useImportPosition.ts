@@ -16,6 +16,10 @@ export function useImportPosition() {
       dividendsAccumulated?: number;
       rentComProventos?: number;
       rentBruta?: number;
+      fixedIncomeIndex?: string;
+      fixedIncomeRate?: number;
+      maturityDate?: string;
+      snapshotValue?: number;
     }) => {
       const supabase = createClient();
       const {
