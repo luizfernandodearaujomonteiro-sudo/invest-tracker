@@ -386,13 +386,19 @@ function FIIExpandedDetails({
   );
 }
 
-// Stock/ETF/BDR/Crypto expanded: Total Investido, Rentabilidade (%), Rentabilidade (R$)
+// Stock/ETF/BDR/Crypto expanded: Total Investido, Dividendos, Retorno Total
 function StockExpandedDetails({ asset }: { asset: PortfolioAsset }) {
-  const rentPercent = asset.profitLossPercent;
-  const rentValue = asset.profitLoss;
+  const dividends = asset.dividendsAccumulated || 0;
+  const capitalGain = asset.profitLoss ?? 0;
+  const totalReturn = capitalGain + dividends;
+  const totalReturnPercent = asset.totalInvested > 0
+    ? (totalReturn / asset.totalInvested) * 100
+    : null;
+  const currLabel = asset.currency === "USD" ? "US$" : "R$";
+  const hasDividends = dividends > 0;
 
   return (
-    <div className="grid grid-cols-3 gap-4 px-6 py-4">
+    <div className={`grid gap-4 px-6 py-4 ${hasDividends ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3"}`}>
       <div>
         <div className="text-xs text-muted-foreground">Total Investido</div>
         <div className="text-sm font-mono">
@@ -401,32 +407,44 @@ function StockExpandedDetails({ asset }: { asset: PortfolioAsset }) {
             : formatCurrency(asset.totalInvested, asset.currency)}
         </div>
       </div>
+      {hasDividends && (
+        <div>
+          <div className="text-xs text-muted-foreground">Dividendos</div>
+          <div className="text-sm font-mono text-emerald-600">
+            {formatCurrency(dividends, asset.currency)}
+          </div>
+        </div>
+      )}
       <div>
-        <div className="text-xs text-muted-foreground">Rentabilidade</div>
+        <div className="text-xs text-muted-foreground">
+          {hasDividends ? "Retorno Total" : "Rentabilidade"}
+        </div>
         <div className="text-sm">
           {asset.totalInvested === 0 ? (
             <span className="font-mono text-muted-foreground">--</span>
           ) : (
-            <PercentBadge value={rentPercent} />
+            <PercentBadge value={hasDividends ? totalReturnPercent : asset.profitLossPercent} />
           )}
         </div>
       </div>
       <div>
-        <div className="text-xs text-muted-foreground">Rentabilidade ({asset.currency === "USD" ? "US$" : "R$"})</div>
+        <div className="text-xs text-muted-foreground">
+          {hasDividends ? `Retorno Total (${currLabel})` : `Rentabilidade (${currLabel})`}
+        </div>
         <div className="text-sm">
-          {rentValue === null || asset.totalInvested === 0 ? (
+          {asset.profitLoss === null || asset.totalInvested === 0 ? (
             <span className="font-mono text-muted-foreground">--</span>
           ) : (
             <span
               className={`font-mono ${
-                Math.abs(rentValue) < 0.01
+                Math.abs(hasDividends ? totalReturn : capitalGain) < 0.01
                   ? "text-muted-foreground"
-                  : rentValue > 0
+                  : (hasDividends ? totalReturn : capitalGain) > 0
                     ? "text-emerald-600"
                     : "text-red-600"
               }`}
             >
-              {formatCurrency(rentValue, asset.currency)}
+              {formatCurrency(hasDividends ? totalReturn : capitalGain, asset.currency)}
             </span>
           )}
         </div>

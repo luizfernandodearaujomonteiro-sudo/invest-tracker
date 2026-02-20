@@ -56,6 +56,7 @@ interface CvmFundResult {
 
 const FII_TYPES: AssetType[] = ["br_fii"];
 const STOCK_TYPES: AssetType[] = ["br_stock", "us_stock", "br_etf", "us_etf", "br_bdr"];
+const US_TYPES: AssetType[] = ["us_stock", "us_etf"];
 const FIXED_INCOME_INDICES = [
   { value: "cdi", label: "CDI" },
   { value: "selic", label: "SELIC" },
@@ -191,6 +192,8 @@ export function ImportPositionDialog({ open, onOpenChange }: ImportPositionDialo
   const [fundVlQuota, setFundVlQuota] = useState<number | null>(null);
   const [fetchingQuota, setFetchingQuota] = useState(false);
   const [fundCnpj, setFundCnpj] = useState("");
+  // US-specific state
+  const [usValueAppliedRaw, setUsValueAppliedRaw] = useState("");
 
   const isFundMarket = market === "funds";
 
@@ -301,6 +304,7 @@ export function ImportPositionDialog({ open, onOpenChange }: ImportPositionDialo
 
   const isFII = selectedAsset ? FII_TYPES.includes(selectedAsset.asset_type) : false;
   const isStock = selectedAsset ? STOCK_TYPES.includes(selectedAsset.asset_type) : false;
+  const isUS = selectedAsset ? US_TYPES.includes(selectedAsset.asset_type) : false;
   const isFixedIncome = selectedAsset?.asset_type === "fixed_income";
   const isFund = selectedAsset?.asset_type === "fund";
 
@@ -322,6 +326,16 @@ export function ImportPositionDialog({ open, onOpenChange }: ImportPositionDialo
     ? (currentPrice - avgPrice) * qty
     : null;
   const calcRentPercent = currentPrice && avgPrice > 0
+    ? ((currentPrice - avgPrice) / avgPrice) * 100
+    : null;
+
+  // US: user enters Valor Aplicado + Preço Médio → compute quantity
+  const usValueApplied = parseCurrencyInput(usValueAppliedRaw);
+  const usCalcQty = isUS && avgPrice > 0 ? usValueApplied / avgPrice : 0;
+  const usCalcRentValue = isUS && currentPrice && usCalcQty > 0
+    ? (currentPrice - avgPrice) * usCalcQty
+    : null;
+  const usCalcRentPercent = isUS && currentPrice && avgPrice > 0
     ? ((currentPrice - avgPrice) / avgPrice) * 100
     : null;
 
@@ -350,12 +364,26 @@ export function ImportPositionDialog({ open, onOpenChange }: ImportPositionDialo
     setFundVlQuota(null);
     setFetchingQuota(false);
     setFundCnpj("");
+    setUsValueAppliedRaw("");
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (isFund) {
+    if (isUS) {
+      // US stocks/ETFs: user entered Valor Aplicado + Preço Médio
+      const computedQty = avgPrice > 0 ? usValueApplied / avgPrice : 0;
+      const dividendsValue = parseCurrencyInput(dividendsRaw);
+      await importPosition.mutateAsync({
+        assetId,
+        brokerId,
+        quantity: computedQty,
+        averagePrice: avgPrice,
+        dividendsAccumulated: dividendsValue > 0 ? dividendsValue : undefined,
+        rentComProventos: usCalcRentPercent ?? undefined,
+        rentBruta: usCalcRentValue ?? undefined,
+      });
+    } else if (isFund) {
       const totalApplied = parseCurrencyInput(fundTotalAppliedRaw);
       const currentVal = parseCurrencyInput(fundCurrentValueRaw);
 
@@ -580,6 +608,86 @@ export function ImportPositionDialog({ open, onOpenChange }: ImportPositionDialo
                   </div>
                 )}
 
+                {/* Criar novo ativo US */}
+                {market === "us" && searchTerm.length >= 2 && !selectedAsset && !showCreateAsset && (
+                  <button
+                    type="button"
+                    className="text-sm text-primary hover:underline"
+                    onClick={() => {
+                      setShowCreateAsset(true);
+                      setNewAssetName(searchTerm.toUpperCase());
+                    }}
+                  >
+                    Nao encontrou? Cadastrar novo ativo US
+                  </button>
+                )}
+
+                {market === "us" && showCreateAsset && !selectedAsset && (
+                  <div className="rounded-lg border p-3 space-y-3">
+                    <div className="text-sm font-medium">Novo ativo US</div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-2">
+                        <Label className="text-xs">Ticker</Label>
+                        <Input
+                          placeholder="Ex: AAPL"
+                          value={newAssetName}
+                          onChange={(e) => setNewAssetName(e.target.value.toUpperCase())}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-xs">Tipo</Label>
+                        <Select value={fixedIncomeIndex || "us_stock"} onValueChange={setFixedIncomeIndex}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="us_stock">Acao US</SelectItem>
+                            <SelectItem value="us_etf">ETF US</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={!newAssetName.trim() || creatingAsset}
+                      onClick={async () => {
+                        setCreatingAsset(true);
+                        const ticker = newAssetName.trim().toUpperCase();
+                        const assetType = fixedIncomeIndex === "us_etf" ? "us_etf" : "us_stock";
+                        try {
+                          const res = await fetch("/api/assets/create", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                              ticker,
+                              name: ticker,
+                              assetType,
+                              currency: "USD",
+                              exchange: "NYSE",
+                            }),
+                          });
+                          const data = await res.json();
+                          if (data.asset) {
+                            const created = data.asset as Asset;
+                            setAssetId(created.id);
+                            setSearchTerm(created.ticker);
+                            setSelectedAssetCache(created);
+                            setShowCreateAsset(false);
+                          }
+                        } catch {
+                          toast.error("Erro ao criar ativo US");
+                        } finally {
+                          setCreatingAsset(false);
+                        }
+                      }}
+                    >
+                      {creatingAsset && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
+                      Criar e selecionar
+                    </Button>
+                  </div>
+                )}
+
                 {/* Criar novo ativo de renda fixa */}
                 {market === "fixed" && searchTerm.length >= 2 && !selectedAsset && !showCreateAsset && (
                   <button
@@ -781,8 +889,78 @@ export function ImportPositionDialog({ open, onOpenChange }: ImportPositionDialo
                   </div>
                 )}
 
-                {/* === RENDA FIXA: campos especificos === */}
-                {isFixedIncome ? (
+                {/* === US STOCKS/ETFs: Valor Aplicado + Preço Médio === */}
+                {isUS ? (
+                  <>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Valor Aplicado (US$)</Label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">US$</span>
+                          <Input
+                            className="pl-12"
+                            placeholder="0,00"
+                            value={formatCurrencyInput(usValueAppliedRaw)}
+                            onChange={(e) => handleMaskedChange(e, setUsValueAppliedRaw)}
+                            required
+                          />
+                        </div>
+                        <p className="text-xs text-muted-foreground">Total investido neste ativo</p>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Preco Medio (US$)</Label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">US$</span>
+                          <Input
+                            className="pl-12"
+                            placeholder="0,00"
+                            value={formatCurrencyInput(averagePriceRaw)}
+                            onChange={(e) => handleMaskedChange(e, setAveragePriceRaw)}
+                            required
+                          />
+                        </div>
+                        <p className="text-xs text-muted-foreground">Preco medio por acao/cota</p>
+                      </div>
+                    </div>
+
+                    {/* Dividendos recebidos (opcional) */}
+                    <div className="space-y-2">
+                      <Label>Dividendos Recebidos (US$) <span className="text-muted-foreground font-normal">(opcional)</span></Label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">US$</span>
+                        <Input
+                          className="pl-12"
+                          placeholder="0,00"
+                          value={formatCurrencyInput(dividendsRaw)}
+                          onChange={(e) => handleMaskedChange(e, setDividendsRaw)}
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground">Total de dividendos ja recebidos</p>
+                    </div>
+
+                    {/* Resumo calculado */}
+                    {usValueApplied > 0 && avgPrice > 0 && (
+                      <div className="rounded-lg border bg-muted/50 p-3 space-y-2">
+                        <div>
+                          <div className="text-xs text-muted-foreground">Quantidade calculada</div>
+                          <div className="text-sm font-medium">
+                            {usCalcQty.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 6 })} acoes/cotas
+                          </div>
+                        </div>
+                        {currentPrice && usCalcRentValue !== null && (
+                          <div>
+                            <div className="text-xs text-muted-foreground">Rentabilidade</div>
+                            <div className={`text-lg font-bold ${usCalcRentValue >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                              US$ {usCalcRentValue.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              {" "}
+                              ({usCalcRentPercent !== null ? `${usCalcRentPercent >= 0 ? "+" : ""}${usCalcRentPercent.toFixed(2)}%` : "--"})
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
+                ) : isFixedIncome ? (
                   <>
                     {/* Badge mostrando indice detectado */}
                     {fixedIncomeIndex && (
@@ -1020,7 +1198,7 @@ export function ImportPositionDialog({ open, onOpenChange }: ImportPositionDialo
                 )}
 
                 {/* === Stocks/ETFs/BDRs/Crypto: Rentabilidade auto-calculada === */}
-                {(isStock || selectedAsset?.asset_type === "crypto") && calcRentValue !== null && (
+                {((isStock && !isUS) || selectedAsset?.asset_type === "crypto") && calcRentValue !== null && (
                   <div className="border-t pt-4">
                     <h3 className="text-sm font-medium mb-3">Rentabilidade</h3>
                     <div className="grid grid-cols-2 gap-4">
@@ -1054,7 +1232,7 @@ export function ImportPositionDialog({ open, onOpenChange }: ImportPositionDialo
             >
               Cancelar
             </Button>
-            <Button type="submit" disabled={importPosition.isPending || !assetId || !brokerId || (!isFixedIncome && !isFund && !quantity) || (isFixedIncome && !averagePriceRaw) || (isFund && (!fundTotalAppliedRaw || !fundCurrentValueRaw))}>
+            <Button type="submit" disabled={importPosition.isPending || !assetId || !brokerId || (!isFixedIncome && !isFund && !isUS && !quantity) || (isUS && (!usValueAppliedRaw || !averagePriceRaw)) || (isFixedIncome && !averagePriceRaw) || (isFund && (!fundTotalAppliedRaw || !fundCurrentValueRaw))}>
               {importPosition.isPending && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               )}

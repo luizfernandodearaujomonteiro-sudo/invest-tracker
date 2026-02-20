@@ -2,7 +2,7 @@ import type { AssetType } from "@/types/database";
 import type { PriceData, HistoricalPrice, DateRange } from "@/types/portfolio";
 import { fetchBrapiQuote, fetchBrapiHistory } from "./brapi";
 import { fetchCoinGeckoPrice, fetchCoinGeckoHistory } from "./coingecko";
-import { fetchAlphaVantageQuote, fetchAlphaVantageHistory } from "./yahoo";
+import { fetchFinnhubQuote, fetchFinnhubHistory } from "./finnhub";
 
 export async function fetchPrice(
   ticker: string,
@@ -18,7 +18,7 @@ export async function fetchPrice(
 
     case "us_stock":
     case "us_etf":
-      return fetchAlphaVantageQuote(ticker);
+      return fetchFinnhubQuote(ticker);
 
     case "crypto":
       if (!coingeckoId) throw new Error(`No CoinGecko ID for ${ticker}`);
@@ -72,13 +72,6 @@ export async function fetchHistory(
 
     case "us_stock":
     case "us_etf": {
-      const outputSize =
-        range === "1D" || range === "1W" || range === "1M"
-          ? "compact"
-          : "full";
-      const history = await fetchAlphaVantageHistory(ticker, outputSize);
-      // Filter by date range
-      const now = new Date();
       const daysMap: Record<DateRange, number> = {
         "1D": 1,
         "1W": 7,
@@ -86,12 +79,9 @@ export async function fetchHistory(
         "3M": 90,
         "1Y": 365,
         "5Y": 1825,
-        MAX: 99999,
+        MAX: 9999,
       };
-      const cutoff = new Date(
-        now.getTime() - daysMap[range] * 24 * 60 * 60 * 1000
-      );
-      return history.filter((p) => new Date(p.date) >= cutoff);
+      return fetchFinnhubHistory(ticker, daysMap[range]);
     }
 
     case "crypto":

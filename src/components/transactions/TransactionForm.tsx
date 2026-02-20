@@ -139,6 +139,7 @@ export function TransactionForm({
     : assets.find((a) => a.id === assetId) || null;
   const isFixedIncome = selectedAsset?.asset_type === "fixed_income";
   const isCrypto = selectedAsset?.asset_type === "crypto";
+  const isUS = selectedAsset?.asset_type === "us_stock" || selectedAsset?.asset_type === "us_etf";
   const isDividend = type === "dividend";
   const currencySymbol = selectedAsset?.currency === "USD" ? "US$" : "R$";
 
@@ -153,9 +154,14 @@ export function TransactionForm({
       : 0
     : parseFloat(pricePerUnit) || 0;
 
+  // For US: user enters total paid + price per unit, we calculate quantity
+  const usComputedQty = isUS && (parseFloat(pricePerUnit) || 0) > 0
+    ? (parseFloat(totalPaid) || 0) / (parseFloat(pricePerUnit) || 1)
+    : 0;
+
   const totalValue = isDividend
     ? (parseFloat(pricePerUnit) || 0)
-    : isCrypto
+    : isCrypto || isUS
       ? (parseFloat(totalPaid) || 0) + (parseFloat(fees) || 0)
       : (parseFloat(quantity) || 0) * (parseFloat(pricePerUnit) || 0) + (parseFloat(fees) || 0);
 
@@ -230,7 +236,7 @@ export function TransactionForm({
       assetId,
       brokerId,
       type,
-      quantity: isFixedIncome || isDividend ? 1 : parseFloat(quantity),
+      quantity: isFixedIncome || isDividend ? 1 : isUS ? usComputedQty : parseFloat(quantity),
       pricePerUnit: isDividend
         ? parseFloat(pricePerUnit)
         : isCrypto ? computedPricePerUnit : parseFloat(pricePerUnit),
@@ -509,6 +515,46 @@ export function TransactionForm({
                 ) : (
                   /* Compra/Venda/Transfer: campos normais */
                   <>
+                    {isUS ? (
+                      /* US: Valor Total + Preco Unitario → calcula quantidade */
+                      <>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label>Valor Total (US$)</Label>
+                            <Input
+                              type="number"
+                              step="any"
+                              min="0"
+                              placeholder="0.00"
+                              value={totalPaid}
+                              onChange={(e) => setTotalPaid(e.target.value)}
+                              required
+                            />
+                            <p className="text-xs text-muted-foreground">Quanto pagou no total</p>
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Preco Unitario (US$)</Label>
+                            <Input
+                              type="number"
+                              step="any"
+                              min="0"
+                              placeholder={fetchingPrice ? "Buscando..." : "0.00"}
+                              value={pricePerUnit}
+                              onChange={(e) => setPricePerUnit(e.target.value)}
+                              required
+                            />
+                            {pricePerUnit && !fetchingPrice && (
+                              <p className="text-xs text-muted-foreground">Preco preenchido automaticamente</p>
+                            )}
+                          </div>
+                        </div>
+                        {usComputedQty > 0 && (
+                          <div className="text-sm text-muted-foreground">
+                            Quantidade: <span className="font-medium text-foreground">{usComputedQty.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 6 })}</span> acoes/cotas
+                          </div>
+                        )}
+                      </>
+                    ) : (
                     <div className="grid grid-cols-2 gap-4">
                       {!isFixedIncome && (
                         <div className="space-y-2">
@@ -546,6 +592,7 @@ export function TransactionForm({
                         )}
                       </div>
                     </div>
+                    )}
 
                     {/* Fees & Date */}
                     <div className="grid grid-cols-2 gap-4">
@@ -584,6 +631,11 @@ export function TransactionForm({
                   {isCrypto && computedPricePerUnit > 0 && (
                     <div className="text-xs text-muted-foreground mt-1">
                       Preco unitario: {currencySymbol} {computedPricePerUnit.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </div>
+                  )}
+                  {isUS && usComputedQty > 0 && (
+                    <div className="text-xs text-muted-foreground mt-1">
+                      Quantidade: {usComputedQty.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 6 })} acoes/cotas
                     </div>
                   )}
                 </div>
