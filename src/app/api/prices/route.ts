@@ -79,7 +79,11 @@ export async function GET(request: Request) {
           (price as { longName?: string }).longName,
           asset.ticker
         );
-        if (detectedType && detectedType !== asset.asset_type) {
+        // Não rebaixar de tipo específico (fii/etf/bdr) para br_stock genérico
+        const isDowngrade =
+          detectedType === "br_stock" &&
+          ["br_fii", "br_etf", "br_bdr"].includes(asset.asset_type);
+        if (detectedType && detectedType !== asset.asset_type && !isDowngrade) {
           console.log(
             `Auto-corrigindo tipo de ${asset.ticker}: ${asset.asset_type} → ${detectedType}`
           );

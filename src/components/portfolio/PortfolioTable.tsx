@@ -17,8 +17,11 @@ import { Badge } from "@/components/ui/badge";
 import { PercentBadge } from "@/components/shared/PercentBadge";
 import { formatCurrency, formatQuantity } from "@/lib/utils/format";
 import { FIXED_INCOME_INDEX_LABELS } from "@/lib/utils/constants";
+import { useBalanceVisibility } from "@/components/providers";
 import type { PortfolioAsset } from "@/types/portfolio";
 import type { AssetType } from "@/types/database";
+
+const HIDDEN = "••••••";
 
 interface PortfolioTableProps {
   assets: PortfolioAsset[];
@@ -51,12 +54,22 @@ function isFII(asset: PortfolioAsset): boolean {
   return FII_TYPES.includes(asset.assetType);
 }
 
-function getCategoryProfitLossPercent(catAssets: PortfolioAsset[]): number | null {
+interface CategorySummary {
+  totalValue: number;
+  totalProfitLoss: number;
+  profitLossPercent: number | null;
+  currency: string;
+}
+
+function getCategorySummary(catAssets: PortfolioAsset[]): CategorySummary {
   let totalInvested = 0;
   let totalProfitLoss = 0;
+  let totalValue = 0;
   let hasValue = false;
+  const currency = catAssets[0]?.currency || "BRL";
 
   for (const a of catAssets) {
+    totalValue += a.currentValue ?? 0;
     if (a.totalInvested > 0 && a.profitLoss !== null) {
       totalInvested += a.totalInvested;
       totalProfitLoss += a.profitLoss;
@@ -64,8 +77,12 @@ function getCategoryProfitLossPercent(catAssets: PortfolioAsset[]): number | nul
     }
   }
 
-  if (!hasValue || totalInvested === 0) return null;
-  return (totalProfitLoss / totalInvested) * 100;
+  return {
+    totalValue,
+    totalProfitLoss,
+    profitLossPercent: hasValue && totalInvested > 0 ? (totalProfitLoss / totalInvested) * 100 : null,
+    currency,
+  };
 }
 
 interface CategoryGroup {
@@ -85,6 +102,9 @@ export function PortfolioTable({ assets }: PortfolioTableProps) {
   // collapsedCategories uses "brokerId::catKey" as key
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
   const [initialized, setInitialized] = useState(false);
+  const { balanceVisible } = useBalanceVisibility();
+
+  const hide = (value: string) => (balanceVisible ? value : HIDDEN);
 
   // Group assets by broker first, then by category within each broker
   const brokerGroups = useMemo(() => {
@@ -186,7 +206,7 @@ export function PortfolioTable({ assets }: PortfolioTableProps) {
             {broker.categories.map((cat) => {
               const compositeKey = `${broker.brokerId}::${cat.key}`;
               const isCatCollapsed = collapsedCategories.has(compositeKey);
-              const catProfitPercent = getCategoryProfitLossPercent(cat.assets);
+              const catSummary = getCategorySummary(cat.assets);
 
               return (
                 <div key={cat.key} className="rounded-lg border overflow-hidden">
@@ -205,7 +225,14 @@ export function PortfolioTable({ assets }: PortfolioTableProps) {
                       <span className="text-sm font-semibold">{cat.label}</span>
                       <span className="text-xs text-muted-foreground">({cat.assets.length})</span>
                     </div>
-                    <PercentBadge value={catProfitPercent} />
+                    <div className="flex items-center gap-3">
+                      {catSummary.totalValue > 0 && (
+                        <span className="text-sm font-mono text-muted-foreground">
+                          {hide(formatCurrency(catSummary.totalValue, catSummary.currency))}
+                        </span>
+                      )}
+                      {balanceVisible && <PercentBadge value={catSummary.profitLossPercent} />}
+                    </div>
                   </button>
 
                   {/* Category content — collapsible */}
@@ -258,21 +285,21 @@ export function PortfolioTable({ assets }: PortfolioTableProps) {
                                 <TableCell className="text-right font-mono text-sm hidden lg:table-cell">
                                   {asset.totalInvested === 0
                                     ? "--"
-                                    : formatCurrency(
+                                    : hide(formatCurrency(
                                         asset.assetType === "fixed_income" ? asset.totalInvested : asset.averagePrice,
                                         asset.currency
-                                      )}
+                                      ))}
                                 </TableCell>
                                 <TableCell className={`text-right font-mono text-sm ${priceColor}`}>
                                   {asset.assetType === "fixed_income" && asset.fixedIncomeIndex
                                     ? `${FIXED_INCOME_INDEX_LABELS[asset.fixedIncomeIndex] || asset.fixedIncomeIndex} ${asset.fixedIncomeRate ?? ""}%`
                                     : asset.currentPrice
-                                      ? formatCurrency(asset.currentPrice, asset.currency)
+                                      ? hide(formatCurrency(asset.currentPrice, asset.currency))
                                       : "--"}
                                 </TableCell>
                                 <TableCell className="text-right font-mono text-sm">
                                   {asset.currentValue
-                                    ? formatCurrency(asset.currentValue, asset.currency)
+                                    ? hide(formatCurrency(asset.currentValue, asset.currency))
                                     : "--"}
                                 </TableCell>
                                 <TableCell className="text-right">
@@ -290,10 +317,10 @@ export function PortfolioTable({ assets }: PortfolioTableProps) {
                                         }`}
                                       >
                                         {asset.profitLoss !== null
-                                          ? formatCurrency(asset.profitLoss, asset.currency)
+                                          ? hide(formatCurrency(asset.profitLoss, asset.currency))
                                           : "--"}
                                       </span>
-                                      <PercentBadge value={asset.profitLossPercent} />
+                                      {balanceVisible && <PercentBadge value={asset.profitLossPercent} />}
                                     </div>
                                   )}
                                 </TableCell>

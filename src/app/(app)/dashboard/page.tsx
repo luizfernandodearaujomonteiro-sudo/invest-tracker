@@ -7,11 +7,15 @@ import { PortfolioTable } from "@/components/portfolio/PortfolioTable";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { Eye, EyeOff } from "lucide-react";
+import { useBalanceVisibility } from "@/components/providers";
 
 export default function DashboardPage() {
   const { data: assets, isLoading } = usePortfolio();
   const summary = usePortfolioSummary(assets);
   const currencySummaries = usePortfolioSummaryByCurrency(assets);
+  const { balanceVisible, toggleBalance } = useBalanceVisibility();
 
   if (isLoading) {
     return <DashboardSkeleton />;
@@ -19,11 +23,21 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Dashboard</h1>
-        <p className="text-muted-foreground">
-          Visao geral dos seus investimentos
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Dashboard</h1>
+          <p className="text-muted-foreground">
+            Visao geral dos seus investimentos
+          </p>
+        </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={toggleBalance}
+          title={balanceVisible ? "Ocultar saldos" : "Mostrar saldos"}
+        >
+          {balanceVisible ? <Eye className="h-5 w-5" /> : <EyeOff className="h-5 w-5" />}
+        </Button>
       </div>
 
       {/* Summary Cards por Moeda */}

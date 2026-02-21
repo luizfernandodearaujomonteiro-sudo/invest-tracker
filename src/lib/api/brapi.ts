@@ -4,6 +4,15 @@ import type { PriceData, HistoricalPrice } from "@/types/portfolio";
 const BRAPI_BASE = "https://brapi.dev/api";
 
 /**
+ * Mapeamento de tickers antigos/migrados para os atuais na brapi.
+ * Ex: CPLE6 (Copel PNB) foi convertido para CPLE3 após reestruturação.
+ */
+const TICKER_ALIASES: Record<string, string> = {
+  CPLE6: "CPLE3",
+  CPLE5: "CPLE3",
+};
+
+/**
  * Detecta o asset_type correto de um ativo BR baseado no nome oficial retornado pela brapi.
  * Retorna null se nao conseguir determinar.
  */
@@ -17,8 +26,14 @@ export function detectBrAssetType(longName: string | undefined, ticker: string):
     return "br_etf";
   }
 
-  // FII: "Fundo de Investimento Imobiliário" ou "FII"
-  if (name.includes("FUNDO DE INVESTIMENTO IMOBILI") || name.includes(" FII")) {
+  // FII: "Fundo de Investimento Imobiliário", "Fundo Investimento Imobiliário" ou "FII"
+  if (
+    name.includes("FUNDO DE INVESTIMENTO IMOBILI") ||
+    name.includes("FUNDO INVESTIMENTO IMOBILI") ||
+    name.includes(" FII") ||
+    name.includes("IMOBILIARIO") ||
+    name.includes("IMOBILIÁRIO")
+  ) {
     return "br_fii";
   }
 
@@ -40,7 +55,8 @@ export function detectBrAssetType(longName: string | undefined, ticker: string):
 
 export async function fetchBrapiQuote(ticker: string): Promise<PriceData & { longName?: string }> {
   const token = process.env.BRAPI_TOKEN;
-  const url = `${BRAPI_BASE}/quote/${ticker}${token ? `?token=${token}` : ""}`;
+  const queryTicker = TICKER_ALIASES[ticker] || ticker;
+  const url = `${BRAPI_BASE}/quote/${queryTicker}${token ? `?token=${token}` : ""}`;
 
   const res = await fetch(url, { next: { revalidate: 300 } });
   if (!res.ok) throw new Error(`brapi error: ${res.status}`);
@@ -50,7 +66,7 @@ export async function fetchBrapiQuote(ticker: string): Promise<PriceData & { lon
   if (!result) throw new Error(`No data for ${ticker}`);
 
   return {
-    ticker: result.symbol,
+    ticker,
     currentPrice: result.regularMarketPrice,
     openPrice: result.regularMarketOpen,
     highPrice: result.regularMarketDayHigh,
@@ -70,7 +86,8 @@ export async function fetchBrapiHistory(
   range: string
 ): Promise<HistoricalPrice[]> {
   const token = process.env.BRAPI_TOKEN;
-  const url = `${BRAPI_BASE}/quote/${ticker}?range=${range}&interval=1d${token ? `&token=${token}` : ""}`;
+  const queryTicker = TICKER_ALIASES[ticker] || ticker;
+  const url = `${BRAPI_BASE}/quote/${queryTicker}?range=${range}&interval=1d${token ? `&token=${token}` : ""}`;
 
   const res = await fetch(url);
   if (!res.ok) throw new Error(`brapi history error: ${res.status}`);

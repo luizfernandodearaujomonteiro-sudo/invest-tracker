@@ -9,6 +9,7 @@ import {
 import { DollarSign, TrendingUp, TrendingDown, Wallet } from "lucide-react";
 import { formatCurrency, formatPercent } from "@/lib/utils/format";
 import { cn } from "@/lib/utils";
+import { useBalanceVisibility } from "@/components/providers";
 import type { Currency } from "@/types/database";
 import type { PortfolioSummary, CurrencySummaries } from "@/types/portfolio";
 
@@ -20,8 +21,11 @@ interface CurrencySummaryCardsProps {
   summaries: CurrencySummaries;
 }
 
+const HIDDEN_VALUE = "••••••";
+
 function SummaryBlock({ summary, label }: { summary: PortfolioSummary; label: string }) {
   const currency = (summary.currency || "BRL") as Currency;
+  const { balanceVisible } = useBalanceVisibility();
 
   const cards = [
     {
@@ -30,6 +34,8 @@ function SummaryBlock({ summary, label }: { summary: PortfolioSummary; label: st
       description: `${summary.assetCount} ativos`,
       icon: Wallet,
       color: "text-blue-600",
+      hideValue: true,
+      hideDescription: false,
     },
     {
       title: "Total Investido",
@@ -37,6 +43,8 @@ function SummaryBlock({ summary, label }: { summary: PortfolioSummary; label: st
       description: "Custo total dos aportes",
       icon: DollarSign,
       color: "text-slate-600",
+      hideValue: true,
+      hideDescription: false,
     },
     {
       title: "Lucro / Perda",
@@ -45,6 +53,8 @@ function SummaryBlock({ summary, label }: { summary: PortfolioSummary; label: st
       icon: summary.totalProfitLoss >= 0 ? TrendingUp : TrendingDown,
       color:
         summary.totalProfitLoss >= 0 ? "text-emerald-600" : "text-red-600",
+      hideValue: true,
+      hideDescription: true,
     },
     {
       title: "Variacao do Dia",
@@ -52,6 +62,8 @@ function SummaryBlock({ summary, label }: { summary: PortfolioSummary; label: st
       description: formatPercent(summary.dayChangePercent),
       icon: summary.dayChange >= 0 ? TrendingUp : TrendingDown,
       color: summary.dayChange >= 0 ? "text-emerald-600" : "text-red-600",
+      hideValue: true,
+      hideDescription: true,
     },
   ];
 
@@ -68,7 +80,9 @@ function SummaryBlock({ summary, label }: { summary: PortfolioSummary; label: st
               <card.icon className={cn("h-4 w-4", card.color)} />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{card.value}</div>
+              <div className="text-2xl font-bold">
+                {!balanceVisible && card.hideValue ? HIDDEN_VALUE : card.value}
+              </div>
               <p
                 className={cn(
                   "text-xs",
@@ -77,7 +91,7 @@ function SummaryBlock({ summary, label }: { summary: PortfolioSummary; label: st
                     : "text-muted-foreground"
                 )}
               >
-                {card.description}
+                {!balanceVisible && card.hideDescription ? HIDDEN_VALUE : card.description}
               </p>
             </CardContent>
           </Card>
